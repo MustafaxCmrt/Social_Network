@@ -14,13 +14,16 @@ public class AuthController : AppController
 {
     private readonly IAuthService _authService;
     private readonly IValidator<LoginRequestDto> _loginValidator;
+    private readonly IValidator<RegisterRequestDto> _registerValidator;
 
     public AuthController(
         IAuthService authService,
-        IValidator<LoginRequestDto> loginValidator)
+        IValidator<LoginRequestDto> loginValidator,
+        IValidator<RegisterRequestDto> registerValidator)
     {
         _authService = authService;
         _loginValidator = loginValidator;
+        _registerValidator = registerValidator;
     }
 
     /// <summary>
@@ -73,12 +76,55 @@ public class AuthController : AppController
     }
 
     /// <summary>
-    /// Kullanıcı kayıt endpoint'i (ileride eklenecek)
+    /// Kullanıcı kayıt endpoint'i
     /// </summary>
+    /// <param name="request">Kayıt bilgileri (ad, soyad, username, email, şifre)</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 201 Created - Kayıt başarılı, kullanıcı bilgileri döner
+    /// 400 Bad Request - Validation hatası
+    /// 409 Conflict - Username veya Email zaten kullanılıyor
+    /// </returns>
     [HttpPost("register")]
-    public async Task<IActionResult> Register()
+    [ProducesResponseType(typeof(RegisterResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Register(
+        [FromBody] RegisterRequestDto request,
+        CancellationToken cancellationToken)
     {
-        // TODO: Register işlemi eklenecek
-        return Ok(new { Message = "Register endpoint - Yakında eklenecek" });
+        // 1. Validation
+        var validationResult = await _registerValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
+        // 2. Register servisini çağır
+        var result = await _authService.RegisterAsync(request, cancellationToken);
+
+        // 3. Kayıt başarısız (Username veya Email zaten kullanılıyor)
+        if (result == null)
+        {
+            return Conflict(new
+            {
+                Message = "Kullanıcı adı veya email adresi zaten kullanılıyor"
+            });
+        }
+
+        // 4. Kayıt başarılı - 201 Created döndür
+        return CreatedAtAction(
+            nameof(Register),
+            new { id = result.UserId },
+            result
+        );
     }
 }

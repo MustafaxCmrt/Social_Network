@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -15,6 +16,14 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
         builder.HasKey(u => u.Id);
 
         // Properties
+        builder.Property(u => u.FirstName)
+            .IsRequired()
+            .HasMaxLength(50);
+
+        builder.Property(u => u.LastName)
+            .IsRequired()
+            .HasMaxLength(50);
+
         builder.Property(u => u.Username)
             .IsRequired()
             .HasMaxLength(50);
@@ -75,5 +84,23 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
             .WithOne(p => p.User)
             .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Restrict); // Kullanıcı silindiğinde post'lar silinmesin
+
+        // Seed Data - Admin kullanıcısı
+        builder.HasData(new Users
+        {
+            Id = 1,
+            FirstName = "Admin",
+            LastName = "User",
+            Username = "admin",
+            Email = "admin@socialnetwork.com",
+            // BCrypt hash for "admin" password
+            PasswordHash = "$2a$11$hKvNNt0fHLsqvVVdKp8R9e2DfWQG3VqLz0rXG0.CqE.8FGvN.3rXe",
+            Role = Roles.Admin,
+            IsActive = true,
+            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            IsDeleted = false,
+            Recstatus = true
+        });
     }
 }

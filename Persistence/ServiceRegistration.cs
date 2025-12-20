@@ -11,11 +11,11 @@ public static class ServiceRegistration
 {
     public static IServiceCollection AddPersistenceServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // MySQL DbContext
+       var connectionString = configuration.GetConnectionString("socialnetwork");
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseMySql(
-                configuration.GetConnectionString("socialnetwork"),
-                ServerVersion.AutoDetect(configuration.GetConnectionString("socialnetwork"))
+                connectionString,
+                new MySqlServerVersion(new Version(9, 4, 0))
             ));
 
         // UnitOfWork

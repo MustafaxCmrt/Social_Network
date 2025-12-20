@@ -1,6 +1,7 @@
 using Application;
 using Infrastructure;
 using Infrastructure.Extensions;
+using Microsoft.OpenApi.Models;
 using Persistence;
 using Serilog;
 
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Serilog Configuration
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
+    .WriteTo.Console()
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -20,47 +22,72 @@ try
     // Add services to the container
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(c =>
+    {
+        c.SwaggerDoc("v1", new OpenApiInfo { Title = "ProductProject.API", Version = "v1" });
+        var securityScheme = new OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Description = "Enter 'Bearer' [space] and then your valid token.",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT"
+        };
+
+        c.AddSecurityDefinition("Bearer", securityScheme);
+
+        var securityRequirement = new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        };
+
+        c.AddSecurityRequirement(securityRequirement);
+    });
 
     // Layer Services
     builder.Services.AddPersistenceServices(builder.Configuration);
-    builder.Services.AddApplicationServices(builder.Configuration); // Configuration parametresi eklendi
+    builder.Services.AddApplicationServices(builder.Configuration);
     builder.Services.AddInfrastructureServices();
 
     var app = builder.Build();
 
     // Configure the HTTP request pipeline
-
-    // 1. Global Exception Handler (en başta olmalı)
     app.UseGlobalExceptionHandler();
-
-    // 2. Serilog Request Logging
     app.UseSerilogRequestLogging();
 
-    // 3. Swagger (Development)
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
         app.UseSwaggerUI();
     }
 
-    // 4. HTTPS Redirection
     app.UseHttpsRedirection();
-
-    // 5. CORS (Authentication'dan önce)
-    app.UseCors("AllowAll"); // Production'da "Production" policy kullan
-
-    // 6. Rate Limiting
+    app.UseCors("AllowAll");
     app.UseRateLimiter();
-
-    // 7. Authentication & Authorization
-    app.UseAuthentication(); // JWT Authentication middleware
+    app.UseAuthentication();
     app.UseAuthorization();
 
-    // 8. Map Controllers
     app.MapControllers()
-        .RequireRateLimiting("PerIpPolicy"); // Tüm controller'lara IP bazlı rate limit
+        .RequireRateLimiting("PerIpPolicy");
 
+    // Uygulama başlamadan önce lifetime event'ini kullan
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        var urls = app.Urls;
+        Log.Information("🚀 Application is running on: {Urls}", string.Join(", ", urls));
+    });
+    
     app.Run();
 }
 catch (Exception ex)

@@ -8,6 +8,14 @@ namespace Application.Services.Abstractions;
 public interface IAuthService
 {
     /// <summary>
+    /// Kullanıcı kayıt işlemini gerçekleştirir
+    /// </summary>
+    /// <param name="request">Kayıt bilgileri (ad, soyad, username, email, şifre)</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Kayıt başarılıysa kullanıcı bilgileri, değilse null</returns>
+    Task<RegisterResponseDto?> RegisterAsync(RegisterRequestDto request, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Kullanıcı giriş işlemini gerçekleştirir
     /// </summary>
     /// <param name="request">Login bilgileri (username/email ve şifre)</param>

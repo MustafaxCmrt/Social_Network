@@ -5,6 +5,8 @@ namespace Domain.Entities;
 
 public class Users : BaseEntity
 {
+    public string FirstName { get; set; } = null!; // Zorunlu - kullanıcının adı
+    public string LastName { get; set; } = null!; // Zorunlu - kullanıcının soyadı
     public string Username { get; set; } = null!; // Zorunlu - kullanıcı adı
     public string Email { get; set; } = null!; // Zorunlu - her kullanıcının emaili olmalı
     public string PasswordHash { get; set; } = null!; // Zorunlu - şifre hash'i olmalı

@@ -8,10 +8,14 @@
 
     <ItemGroup>
       <ProjectReference Include="../Domain/Domain.csproj" />
+      <ProjectReference Include="../Persistence/Persistence.csproj" />
     </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
+      <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
+      <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />
+      <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     </ItemGroup>
 
 </Project>

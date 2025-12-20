@@ -24,7 +24,7 @@ try
 
     // Layer Services
     builder.Services.AddPersistenceServices(builder.Configuration);
-    builder.Services.AddApplicationServices();
+    builder.Services.AddApplicationServices(builder.Configuration); // Configuration parametresi eklendi
     builder.Services.AddInfrastructureServices();
 
     var app = builder.Build();
@@ -53,8 +53,8 @@ try
     // 6. Rate Limiting
     app.UseRateLimiter();
 
-    // 7. Authentication & Authorization (sonra eklenecek)
-    // app.UseAuthentication();
+    // 7. Authentication & Authorization
+    app.UseAuthentication(); // JWT Authentication middleware
     app.UseAuthorization();
 
     // 8. Map Controllers

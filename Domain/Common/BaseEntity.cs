@@ -2,6 +2,10 @@ namespace Domain.Common;
 
 public class BaseEntity
 {
-    public int Id { get; set; } // Primary Key - EF Core tarafından otomatik atanır
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // Zorunlu - oluşturulma zamanı
+   public int Id { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? DeletedDate { get; set; }
+    public bool IsDeleted { get; set; } = false; // Soft delete flag
+    public bool Recstatus { get; set; } = true; // true = aktif, false = pasif
 }

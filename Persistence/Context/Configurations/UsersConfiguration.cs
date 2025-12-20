@@ -15,6 +15,10 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
         builder.HasKey(u => u.Id);
 
         // Properties
+        builder.Property(u => u.Username)
+            .IsRequired()
+            .HasMaxLength(50);
+
         builder.Property(u => u.Email)
             .IsRequired()
             .HasMaxLength(255);
@@ -50,6 +54,10 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
             .HasDefaultValue(true);
 
         // Indexes
+        builder.HasIndex(u => u.Username)
+            .IsUnique()
+            .HasDatabaseName("IX_Users_Username");
+
         builder.HasIndex(u => u.Email)
             .IsUnique()
             .HasDatabaseName("IX_Users_Email");

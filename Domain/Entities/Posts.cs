@@ -5,6 +5,7 @@ namespace Domain.Entities;
 public class Posts : BaseEntity
 {
     public string Content { get; set; } = null!; // Zorunlu - post içeriği olmalı
+    public string? Img { get; set; } // Opsiyonel - post'ta resim olabilir
     public bool IsSolution { get; set; } = false; // Zorunlu - başlangıçta çözüm değil
 
     public int ThreadId { get; set; } // Foreign Key - Zorunlu

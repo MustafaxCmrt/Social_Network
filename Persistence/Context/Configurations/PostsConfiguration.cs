@@ -19,6 +19,9 @@ public class PostsConfiguration : IEntityTypeConfiguration<Posts>
             .IsRequired()
             .HasMaxLength(5000);
 
+        builder.Property(p => p.Img)
+            .HasMaxLength(500);
+
         builder.Property(p => p.IsSolution)
             .IsRequired()
             .HasDefaultValue(false);

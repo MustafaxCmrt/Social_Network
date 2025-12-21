@@ -85,6 +85,7 @@ public static class ServiceRegistration
         // Application Services - Scoped: Her HTTP request için yeni instance oluşturulur
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
 
         return services;
     }

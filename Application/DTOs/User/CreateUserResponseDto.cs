@@ -1,0 +1,52 @@
+namespace Application.DTOs.User;
+
+/// <summary>
+/// Kullanıcı oluşturma başarılı olduğunda dönen response DTO
+/// </summary>
+public class CreateUserResponseDto
+{
+    /// <summary>
+    /// Oluşturulan kullanıcının ID'si
+    /// </summary>
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// Kullanıcının adı
+    /// </summary>
+    public string FirstName { get; set; } = null!;
+
+    /// <summary>
+    /// Kullanıcının soyadı
+    /// </summary>
+    public string LastName { get; set; } = null!;
+
+    /// <summary>
+    /// Kullanıcı adı
+    /// </summary>
+    public string Username { get; set; } = null!;
+
+    /// <summary>
+    /// Email adresi
+    /// </summary>
+    public string Email { get; set; } = null!;
+
+    /// <summary>
+    /// Kullanıcının rolü
+    /// </summary>
+    public string Role { get; set; } = null!;
+
+    /// <summary>
+    /// Hesap aktif mi?
+    /// </summary>
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Oluşturulma tarihi
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Başarı mesajı
+    /// </summary>
+    public string Message { get; set; } = "Kullanıcı başarıyla oluşturuldu";
+}

@@ -2,14 +2,21 @@ namespace Application.DTOs.Auth;
 
 /// <summary>
 /// Login başarılı olduğunda client'a dönen response DTO
-/// JWT token ve kullanıcı bilgilerini içerir
+/// JWT token bilgilerini içerir
+/// Kullanıcı bilgileri (userId, username, email, role) JWT token içinde mevcuttur
 /// </summary>
 public record LoginResponseDto
 {
     /// <summary>
     /// JWT access token - Client bu token'ı her istekte Authorization header'ında gönderir
+    /// Token içinde userId, username, email, role bilgileri bulunur
     /// </summary>
     public string AccessToken { get; set; } = null!;
+    
+    /// <summary>
+    /// Refresh token - Access token süresi dolduğunda yeni token almak için kullanılır
+    /// </summary>
+    public string RefreshToken { get; set; } = null!;
 
     /// <summary>
     /// Token'ın geçerlilik süresi (dakika cinsinden)
@@ -21,24 +28,9 @@ public record LoginResponseDto
     /// Token türü - genellikle "Bearer"
     /// </summary>
     public string TokenType { get; set; } = "Bearer";
-
+    
     /// <summary>
-    /// Giriş yapan kullanıcının ID'si
+    /// Refresh token'ın geçerlilik süresi (gün cinsinden)
     /// </summary>
-    public int UserId { get; set; }
-
-    /// <summary>
-    /// Kullanıcı adı
-    /// </summary>
-    public string Username { get; set; } = null!;
-
-    /// <summary>
-    /// Email adresi
-    /// </summary>
-    public string Email { get; set; } = null!;
-
-    /// <summary>
-    /// Kullanıcının rolü (Admin, User, Moderator vs.)
-    /// </summary>
-    public string Role { get; set; } = null!;
+    public int RefreshTokenExpiresInDays { get; set; }
 }

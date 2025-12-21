@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Persistence.Context;
 
@@ -10,9 +11,11 @@ using Persistence.Context;
 namespace Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251221074029_UpdateAdminPasswordToAdmin123")]
+    partial class UpdateAdminPasswordToAdmin123
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -257,11 +260,6 @@ namespace Persistence.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
 
-                    b.Property<int>("RefreshTokenVersion")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
                     b.Property<int>("Role")
                         .HasColumnType("int");
 
@@ -298,9 +296,8 @@ namespace Persistence.Migrations
                             IsActive = true,
                             IsDeleted = false,
                             LastName = "User",
-                            PasswordHash = "$2a$11$fyq3EWAFEU.uzzBO4.Y/0uKyYKgmvVLprscafnWFjUfltT3svmQRa",
+                            PasswordHash = "$2a$11$dWCs/zHRDhoEDeyioVaOCuLc5S53.UXZRMCdN2RQ46uABdPkUCcPa",
                             Recstatus = true,
-                            RefreshTokenVersion = 0,
                             Role = 1,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Username = "admin"

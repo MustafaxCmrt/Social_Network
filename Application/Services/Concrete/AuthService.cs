@@ -112,20 +112,92 @@ public class AuthService : IAuthService
         if (!user.IsActive)
             return null;
 
-        // 4. JWT token oluştur
-        var accessToken = _jwtService.GenerateAccessToken(user);
-        var expiresIn = _jwtService.GetTokenExpirationMinutes();
+        // 4. Refresh token version'ı artır - hem access hem refresh token aynı versiyonu kullanacak
+        user.RefreshTokenVersion++;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // 5. Response DTO oluştur ve döndür
+        // 5. JWT access token ve refresh token oluştur (aynı version ile)
+        var accessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
+        var refreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
+        var expiresIn = _jwtService.GetTokenExpirationMinutes();
+        var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
+
+        // 6. Response DTO oluştur ve döndür
         return new LoginResponseDto
         {
             AccessToken = accessToken,
+            RefreshToken = refreshToken,
             ExpiresIn = expiresIn,
             TokenType = "Bearer",
-            UserId = user.Id,
-            Username = user.Username,
-            Email = user.Email,
-            Role = user.Role.ToString()
+            RefreshTokenExpiresInDays = refreshTokenExpiresInDays
+        };
+    }
+    
+    /// <summary>
+    /// Refresh token ile yeni access token ve refresh token alır
+    /// 1. Refresh token'ı validate eder ve versiyon bilgisini alır
+    /// 2. Kullanıcıyı bulur ve versiyon eşleşmesini kontrol eder
+    /// 3. Yeni versiyon ile yeni tokenlar oluşturur
+    /// </summary>
+    public async Task<RefreshTokenResponseDto?> RefreshTokenAsync(RefreshTokenRequestDto request, CancellationToken cancellationToken = default)
+    {
+        // 1. Refresh token'ı validate et ve içindeki bilgileri al
+        var (isValid, userId, version) = _jwtService.ValidateRefreshToken(request.RefreshToken);
+        
+        if (!isValid)
+            return null;
+        
+        // 2. Kullanıcıyı bul
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+        
+        if (user == null || !user.IsActive || user.IsDeleted)
+            return null;
+        
+        // 3. Version kontrolü - token'daki version ile veritabanındaki eşleşmeli
+        if (user.RefreshTokenVersion != version)
+            return null;
+        
+        // 4. Yeni version oluştur
+        user.RefreshTokenVersion++;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        
+        // 5. Yeni access token ve refresh token oluştur (yeni version ile)
+        var newAccessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
+        var newRefreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
+        var expiresIn = _jwtService.GetTokenExpirationMinutes();
+        var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
+        
+        // 6. Response DTO oluştur ve döndür
+        return new RefreshTokenResponseDto
+        {
+            AccessToken = newAccessToken,
+            ExpiresIn = expiresIn,
+            TokenType = "Bearer",
+            RefreshToken = newRefreshToken,
+            RefreshTokenExpiresInDays = refreshTokenExpiresInDays
+        };
+    }
+    
+    /// <summary>
+    /// Kullanıcının tüm tokenlarını geçersiz kılar
+    /// Token version'ı artırır - böylece mevcut tüm tokenlar geçersiz olur
+    /// </summary>
+    public async Task<LogoutResponseDto?> LogoutAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        // 1. Kullanıcıyı bul
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+        
+        if (user == null || !user.IsActive || user.IsDeleted)
+            return null;
+        
+        // 2. Token version'ı artır - tüm mevcut tokenlar geçersiz olur
+        user.RefreshTokenVersion++;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        
+        // 3. Başarılı çıkış mesajı döndür
+        return new LogoutResponseDto
+        {
+            Message = "Başarıyla çıkış yapıldı"
         };
     }
 }

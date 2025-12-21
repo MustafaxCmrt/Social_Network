@@ -46,6 +46,11 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
         builder.Property(u => u.IsActive)
             .IsRequired()
             .HasDefaultValue(true);
+        
+        // Refresh Token Versioning - her login/logout/refresh'de artar
+        builder.Property(u => u.RefreshTokenVersion)
+            .IsRequired()
+            .HasDefaultValue(0);
 
         // BaseEntity properties
         builder.Property(u => u.CreatedAt)
@@ -93,10 +98,11 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
             LastName = "User",
             Username = "admin",
             Email = "admin@socialnetwork.com",
-            // BCrypt hash for "admin" password
-            PasswordHash = "$2a$11$hKvNNt0fHLsqvVVdKp8R9e2DfWQG3VqLz0rXG0.CqE.8FGvN.3rXe",
+            // BCrypt hash for "Admin123." password
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123."),
             Role = Roles.Admin,
             IsActive = true,
+            RefreshTokenVersion = 0, // Başlangıç versiyonu
             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             IsDeleted = false,

@@ -26,4 +26,10 @@ public class JwtSettings
     /// Örnek: 60 = 1 saat, 1440 = 24 saat
     /// </summary>
     public int ExpirationMinutes { get; set; }
+    
+    /// <summary>
+    /// Refresh Token'ın geçerlilik süresi (gün cinsinden)
+    /// Örnek: 1 = 1 gün, 7 = 1 hafta, 30 = 1 ay
+    /// </summary>
+    public int RefreshTokenExpirationDays { get; set; }
 }

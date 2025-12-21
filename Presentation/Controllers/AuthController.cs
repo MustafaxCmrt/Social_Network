@@ -1,6 +1,7 @@
 using Application.DTOs.Auth;
 using Application.Services.Abstractions;
 using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Presentation.Controllers.Abstraction;
 
@@ -126,5 +127,65 @@ public class AuthController : AppController
             new { id = result.UserId },
             result
         );
+    }
+    
+    /// <summary>
+    /// Refresh token ile yeni access token alma endpoint'i
+    /// </summary>
+    /// <param name="request">Refresh token bilgisi</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Yeni access token ve refresh token döner
+    /// 401 Unauthorized - Refresh token geçersiz veya süresi dolmuş
+    /// </returns>
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(RefreshTokenResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RefreshToken(
+        [FromBody] RefreshTokenRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        // 1. Refresh token servisini çağır
+        var result = await _authService.RefreshTokenAsync(request, cancellationToken);
+        
+        // 2. Refresh token geçersiz veya süresi dolmuş
+        if (result == null)
+        {
+            return Unauthorized(new
+            {
+                Message = "Refresh token geçersiz veya süresi dolmuş"
+            });
+        }
+        
+        // 3. Yeni token'ları döndür
+        return Ok(result);
+    }
+    
+    /// <summary>
+    /// Kullanıcı çıkış (logout) endpoint'i
+    /// Authorization header'daki token'dan userId alır ve token version'ını artırarak tüm tokenları geçersiz kılar
+    /// </summary>
+    /// <returns>
+    /// 200 OK - Çıkış başarılı
+    /// 401 Unauthorized - Token geçersiz veya kullanıcı bulunamadı
+    /// </returns>
+    [HttpPost("logout")]
+    [Authorize] // JWT authentication gerekli
+    [ProducesResponseType(typeof(LogoutResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Logout()
+    {
+        // Token'dan userId'yi al
+        var userIdClaim = User.FindFirst("UserId")?.Value;
+        
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            return Unauthorized(new { message = "Geçersiz token" });
+
+        var result = await _authService.LogoutAsync(userId, HttpContext.RequestAborted);
+
+        if (result == null)
+            return Unauthorized(new { message = "Kullanıcı bulunamadı" });
+
+        return Ok(result);
     }
 }

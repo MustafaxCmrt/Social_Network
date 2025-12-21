@@ -14,6 +14,10 @@ public class Users : BaseEntity
     public Roles Role { get; set; } // Zorunlu - enum default değer alır (0)
     public bool IsActive { get; set; } = true; // Zorunlu - yeni kullanıcı aktif olarak başlar
     
+    // Refresh Token versiyonlama - her login/logout/refresh'de artar
+    // Token içinde bu versiyon claim olarak taşınır, veritabanı ile eşleşmezse token geçersiz olur
+    public int RefreshTokenVersion { get; set; } = 0;
+    
     // Bir kullanıcının birden fazla konusu olabilir:
     public ICollection<Threads> Threads { get; set; } = new List<Threads>();
     

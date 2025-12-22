@@ -27,6 +27,20 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
         return await _dbSet.ToListAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<T>> GetAllWithIncludesAsync(
+        Func<IQueryable<T>, Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<T, object>>? include = null,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<T> query = _dbSet;
+        
+        if (include != null)
+        {
+            query = include(query);
+        }
+        
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
     {
         return await _dbSet.Where(predicate).ToListAsync(cancellationToken);

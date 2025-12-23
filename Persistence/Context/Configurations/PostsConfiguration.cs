@@ -32,12 +32,21 @@ public class PostsConfiguration : IEntityTypeConfiguration<Posts>
         builder.Property(p => p.UserId)
             .IsRequired();
 
-        // BaseEntity properties
+        // BaseEntity properties - Audit Trail
         builder.Property(p => p.CreatedAt)
             .IsRequired();
 
         builder.Property(p => p.UpdatedAt)
             .IsRequired();
+        
+        builder.Property(p => p.CreatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(p => p.UpdatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(p => p.DeletedUserId)
+            .IsRequired(false); // Nullable
 
         builder.Property(p => p.IsDeleted)
             .IsRequired()

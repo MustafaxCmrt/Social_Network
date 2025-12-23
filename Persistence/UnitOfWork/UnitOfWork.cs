@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.Services;
 using Microsoft.EntityFrameworkCore.Storage;
 using Persistence.Context;
 using Persistence.Repositories;
@@ -8,6 +9,7 @@ namespace Persistence.UnitOfWork;
 public class UnitOfWork : IUnitOfWork
 {
     private readonly ApplicationDbContext _context;
+    private readonly ICurrentUserService? _currentUserService;
     private IDbContextTransaction? _transaction;
 
     // Lazy initialization için private field'lar
@@ -16,9 +18,10 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<Threads>? _threads;
     private IRepository<Categories>? _categories;
 
-    public UnitOfWork(ApplicationDbContext context)
+    public UnitOfWork(ApplicationDbContext context, ICurrentUserService? currentUserService)
     {
         _context = context;
+        _currentUserService = currentUserService;
     }
 
     // Lazy-loaded Repository'ler
@@ -30,6 +33,9 @@ public class UnitOfWork : IUnitOfWork
     // SaveChanges
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        // Mevcut kullanıcı ID'sini DbContext'e set et
+        _context.CurrentUserId = _currentUserService?.GetCurrentUserId();
+
         return await _context.SaveChangesAsync(cancellationToken);
     }
 

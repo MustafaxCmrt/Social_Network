@@ -30,6 +30,8 @@ public class CategoryService : ICategoryService
             Description = c.Description,
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt,
+            CreatedUserId = c.CreatedUserId,
+            UpdatedUserId = c.UpdatedUserId,
             ThreadCount = c.Threads.Count
         });
     }
@@ -53,6 +55,8 @@ public class CategoryService : ICategoryService
             Description = category.Description,
             CreatedAt = category.CreatedAt,
             UpdatedAt = category.UpdatedAt,
+            CreatedUserId = category.CreatedUserId,
+            UpdatedUserId = category.UpdatedUserId,
             ThreadCount = category.Threads?.Count ?? 0
         };
     }
@@ -75,8 +79,8 @@ public class CategoryService : ICategoryService
             Slug = category.Slug,
             Description = category.Description,
             CreatedAt = category.CreatedAt,
-            UpdatedAt = category.UpdatedAt,
-            ThreadCount = category.Threads?.Count ?? 0
+            UpdatedAt = category.UpdatedAt,            CreatedUserId = category.CreatedUserId,
+            UpdatedUserId = category.UpdatedUserId,            ThreadCount = category.Threads?.Count ?? 0
         };
     }
 
@@ -113,6 +117,8 @@ public class CategoryService : ICategoryService
             Description = category.Description,
             CreatedAt = category.CreatedAt,
             UpdatedAt = category.UpdatedAt,
+            CreatedUserId = category.CreatedUserId,
+            UpdatedUserId = category.UpdatedUserId,
             ThreadCount = 0
         };
     }
@@ -154,6 +160,8 @@ public class CategoryService : ICategoryService
             Description = category.Description,
             CreatedAt = category.CreatedAt,
             UpdatedAt = category.UpdatedAt,
+            CreatedUserId = category.CreatedUserId,
+            UpdatedUserId = category.UpdatedUserId,
             ThreadCount = category.Threads?.Count ?? 0
         };
     }

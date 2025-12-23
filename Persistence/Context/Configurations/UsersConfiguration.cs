@@ -52,12 +52,21 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
             .IsRequired()
             .HasDefaultValue(0);
 
-        // BaseEntity properties
+        // BaseEntity properties - Audit Trail
         builder.Property(u => u.CreatedAt)
             .IsRequired();
 
         builder.Property(u => u.UpdatedAt)
             .IsRequired();
+        
+        builder.Property(u => u.CreatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(u => u.UpdatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(u => u.DeletedUserId)
+            .IsRequired(false); // Nullable
 
         builder.Property(u => u.IsDeleted)
             .IsRequired()

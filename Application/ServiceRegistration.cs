@@ -2,6 +2,7 @@ using System.Text;
 using Application.Models;
 using Application.Services.Abstractions;
 using Application.Services.Concrete;
+using Domain.Services;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
@@ -83,6 +84,8 @@ public static class ServiceRegistration
         }
 
         // Application Services - Scoped: Her HTTP request için yeni instance oluşturulur
+        services.AddHttpContextAccessor(); // IHttpContextAccessor için gerekli
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();

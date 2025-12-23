@@ -37,12 +37,21 @@ public class ThreadsConfiguration : IEntityTypeConfiguration<Threads>
         builder.Property(t => t.CategoryId)
             .IsRequired();
 
-        // BaseEntity properties
+        // BaseEntity properties - Audit Trail
         builder.Property(t => t.CreatedAt)
             .IsRequired();
 
         builder.Property(t => t.UpdatedAt)
             .IsRequired();
+        
+        builder.Property(t => t.CreatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(t => t.UpdatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(t => t.DeletedUserId)
+            .IsRequired(false); // Nullable
 
         builder.Property(t => t.IsDeleted)
             .IsRequired()

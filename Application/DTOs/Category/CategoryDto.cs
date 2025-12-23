@@ -9,4 +9,8 @@ public class CategoryDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public int ThreadCount { get; set; } // Bu kategorideki konu sayısı
+    
+    // Audit trail - kim oluşturdu/güncelledi
+    public int? CreatedUserId { get; set; }
+    public int? UpdatedUserId { get; set; }
 }

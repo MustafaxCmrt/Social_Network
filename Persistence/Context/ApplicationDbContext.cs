@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Domain.Common;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,10 @@ public class ApplicationDbContext : DbContext
         : base(options)
     {
     }
+    
+    // Mevcut kullanıcı ID'sini saklamak için property
+    // UnitOfWork tarafından set edilecek
+    public int? CurrentUserId { get; set; }
     
     public DbSet<Users> Users { get; set; }
     public DbSet<Posts> Posts { get; set; }
@@ -41,11 +46,20 @@ public class ApplicationDbContext : DbContext
                 // Yeni kayıt eklendiğinde
                 entry.Entity.CreatedAt = DateTime.UtcNow;
                 entry.Entity.UpdatedAt = DateTime.UtcNow;
+                entry.Entity.CreatedUserId = CurrentUserId;
+                entry.Entity.UpdatedUserId = CurrentUserId;
             }
             else if (entry.State == EntityState.Modified)
             {
                 // Kayıt güncellendiğinde
                 entry.Entity.UpdatedAt = DateTime.UtcNow;
+                entry.Entity.UpdatedUserId = CurrentUserId;
+                
+                // Soft delete işlemi ise DeletedUserId'yi de set et
+                if (entry.Entity.IsDeleted && entry.Entity.DeletedDate.HasValue)
+                {
+                    entry.Entity.DeletedUserId = CurrentUserId;
+                }
             }
         }
         

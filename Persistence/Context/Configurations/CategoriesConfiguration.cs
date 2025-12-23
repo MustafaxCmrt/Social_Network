@@ -26,12 +26,21 @@ public class CategoriesConfiguration : IEntityTypeConfiguration<Categories>
         builder.Property(c => c.Description)
             .HasMaxLength(500);
 
-        // BaseEntity properties
+        // BaseEntity properties - Audit Trail
         builder.Property(c => c.CreatedAt)
             .IsRequired();
 
         builder.Property(c => c.UpdatedAt)
             .IsRequired();
+        
+        builder.Property(c => c.CreatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(c => c.UpdatedUserId)
+            .IsRequired(false); // Nullable
+        
+        builder.Property(c => c.DeletedUserId)
+            .IsRequired(false); // Nullable
 
         builder.Property(c => c.IsDeleted)
             .IsRequired()

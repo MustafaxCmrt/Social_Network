@@ -99,28 +99,37 @@ public class CategoryService : ICategoryService
             throw new InvalidOperationException($"'{createCategoryDto.Title}' başlıklı kategori zaten mevcut.");
         }
 
-        var category = new Categories
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
         {
-            Title = createCategoryDto.Title,
-            Slug = slug,
-            Description = createCategoryDto.Description
-        };
+            var category = new Categories
+            {
+                Title = createCategoryDto.Title,
+                Slug = slug,
+                Description = createCategoryDto.Description
+            };
 
-        await _unitOfWork.Categories.CreateAsync(category, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.Categories.CreateAsync(category, cancellationToken);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
 
-        return new CategoryDto
+            return new CategoryDto
+            {
+                Id = category.Id,
+                Title = category.Title,
+                Slug = category.Slug,
+                Description = category.Description,
+                CreatedAt = category.CreatedAt,
+                UpdatedAt = category.UpdatedAt,
+                CreatedUserId = category.CreatedUserId,
+                UpdatedUserId = category.UpdatedUserId,
+                ThreadCount = 0
+            };
+        }
+        catch
         {
-            Id = category.Id,
-            Title = category.Title,
-            Slug = category.Slug,
-            Description = category.Description,
-            CreatedAt = category.CreatedAt,
-            UpdatedAt = category.UpdatedAt,
-            CreatedUserId = category.CreatedUserId,
-            UpdatedUserId = category.UpdatedUserId,
-            ThreadCount = 0
-        };
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<CategoryDto> UpdateCategoryAsync(int id, UpdateCategoryDto updateCategoryDto, CancellationToken cancellationToken = default)
@@ -145,25 +154,34 @@ public class CategoryService : ICategoryService
             throw new InvalidOperationException($"'{updateCategoryDto.Title}' başlıklı kategori zaten mevcut.");
         }
 
-        category.Title = updateCategoryDto.Title;
-        category.Slug = newSlug;
-        category.Description = updateCategoryDto.Description;
-
-        _unitOfWork.Categories.Update(category);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return new CategoryDto
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
         {
-            Id = category.Id,
-            Title = category.Title,
-            Slug = category.Slug,
-            Description = category.Description,
-            CreatedAt = category.CreatedAt,
-            UpdatedAt = category.UpdatedAt,
-            CreatedUserId = category.CreatedUserId,
-            UpdatedUserId = category.UpdatedUserId,
-            ThreadCount = category.Threads?.Count ?? 0
-        };
+            category.Title = updateCategoryDto.Title;
+            category.Slug = newSlug;
+            category.Description = updateCategoryDto.Description;
+
+            _unitOfWork.Categories.Update(category);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+
+            return new CategoryDto
+            {
+                Id = category.Id,
+                Title = category.Title,
+                Slug = category.Slug,
+                Description = category.Description,
+                CreatedAt = category.CreatedAt,
+                UpdatedAt = category.UpdatedAt,
+                CreatedUserId = category.CreatedUserId,
+                UpdatedUserId = category.UpdatedUserId,
+                ThreadCount = category.Threads?.Count ?? 0
+            };
+        }
+        catch
+        {
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<bool> DeleteCategoryAsync(int id, CancellationToken cancellationToken = default)

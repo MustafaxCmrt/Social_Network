@@ -90,6 +90,7 @@ public static class ServiceRegistration
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IThreadService, ThreadService>();
 
         return services;
     }

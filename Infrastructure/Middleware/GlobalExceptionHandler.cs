@@ -37,7 +37,7 @@ public class GlobalExceptionHandler
         {
             ArgumentNullException => (HttpStatusCode.BadRequest, "Required parameter is missing"),
             ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
-            UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized access"),
+            UnauthorizedAccessException => (HttpStatusCode.Forbidden, exception.Message),
             KeyNotFoundException => (HttpStatusCode.NotFound, "Resource not found"),
             InvalidOperationException => (HttpStatusCode.Conflict, exception.Message),
             _ => (HttpStatusCode.InternalServerError, "An internal server error occurred")

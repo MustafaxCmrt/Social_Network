@@ -1,5 +1,6 @@
 using Application.DTOs.Thread;
 using Application.Services.Abstractions;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Presentation.Controllers.Abstraction;
@@ -10,18 +11,44 @@ public class ThreadController : AppController
 {
     private readonly IThreadService _threadService;
     private readonly ILogger<ThreadController> _logger;
+    private readonly IValidator<CreateThreadDto> _createValidator;
+    private readonly IValidator<UpdateThreadDto> _updateValidator;
 
-    public ThreadController(IThreadService threadService, ILogger<ThreadController> logger)
+    public ThreadController(
+        IThreadService threadService,
+        ILogger<ThreadController> logger,
+        IValidator<CreateThreadDto> createValidator,
+        IValidator<UpdateThreadDto> updateValidator)
     {
         _threadService = threadService;
         _logger = logger;
+        _createValidator = createValidator;
+        _updateValidator = updateValidator;
     }
 
     [HttpGet("getAll")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetAllThreads(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllThreads(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? q = null,
+        [FromQuery] int? categoryId = null,
+        [FromQuery] bool? isSolved = null,
+        [FromQuery] int? userId = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
+        CancellationToken cancellationToken = default)
     {
-        var threads = await _threadService.GetAllThreadsAsync(cancellationToken);
+        var threads = await _threadService.GetAllThreadsAsync(
+            page,
+            pageSize,
+            q,
+            categoryId,
+            isSolved,
+            userId,
+            sortBy,
+            sortDir,
+            cancellationToken);
         return Ok(threads);
     }
 
@@ -42,6 +69,20 @@ public class ThreadController : AppController
     [Authorize]
     public async Task<IActionResult> CreateThread([FromBody] CreateThreadDto createThreadDto, CancellationToken cancellationToken)
     {
+        var validationResult = await _createValidator.ValidateAsync(createThreadDto, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
         try
         {
             var thread = await _threadService.CreateThreadAsync(createThreadDto, cancellationToken);
@@ -62,6 +103,20 @@ public class ThreadController : AppController
     [Authorize]
     public async Task<IActionResult> UpdateThread([FromBody] UpdateThreadDto updateThreadDto, CancellationToken cancellationToken)
     {
+        var validationResult = await _updateValidator.ValidateAsync(updateThreadDto, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
         try
         {
             var thread = await _threadService.UpdateThreadAsync(updateThreadDto, cancellationToken);
@@ -79,7 +134,7 @@ public class ThreadController : AppController
     }
 
     [HttpDelete("delete/{id}")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize]
     public async Task<IActionResult> DeleteThread(int id, CancellationToken cancellationToken)
     {
         try
@@ -91,6 +146,11 @@ public class ThreadController : AppController
             }
 
             return NoContent();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Thread delete forbidden");
+            return Forbid();
         }
         catch (InvalidOperationException ex)
         {

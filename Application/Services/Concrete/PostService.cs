@@ -1,4 +1,5 @@
 using Application.DTOs.Post;
+using Application.DTOs.Common;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Services;
@@ -17,10 +18,40 @@ public class PostService : IPostService
         _currentUserService = currentUserService;
     }
 
-    public async Task<IEnumerable<PostDto>> GetAllPostsByThreadIdAsync(int threadId, CancellationToken cancellationToken = default)
+    public async Task<PagedResultDto<PostDto>> GetAllPostsByThreadIdAsync(
+        int threadId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
     {
         var posts = await _unitOfWork.Posts.FindAsync(p => p.ThreadId == threadId, cancellationToken);
-        return posts.Select(MapToDto);
+
+        var normalizedPage = page < 1 ? 1 : page;
+        var normalizedPageSize = pageSize < 1 ? 20 : pageSize;
+
+        var ordered = posts
+            .OrderByDescending(p => p.IsSolution)
+            .ThenByDescending(p => p.CreatedAt)
+            .ThenBy(p => p.Id)
+            .ToList();
+
+        var totalCount = ordered.Count;
+        var totalPages = (int)Math.Ceiling(totalCount / (double)normalizedPageSize);
+
+        var items = ordered
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
+            .Select(MapToDto)
+            .ToList();
+
+        return new PagedResultDto<PostDto>
+        {
+            Items = items,
+            Page = normalizedPage,
+            PageSize = normalizedPageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 
     public async Task<PostDto?> GetPostByIdAsync(int id, CancellationToken cancellationToken = default)

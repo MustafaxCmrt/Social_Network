@@ -1,8 +1,8 @@
 using Application.DTOs.Thread;
 using Application.Services.Abstractions;
+using Application.DTOs.Common;
 using Domain.Entities;
 using Domain.Services;
-using Microsoft.EntityFrameworkCore;
 using Persistence.UnitOfWork;
 
 namespace Application.Services.Concrete;
@@ -18,23 +18,90 @@ public class ThreadService : IThreadService
         _currentUserService = currentUserService;
     }
 
-    public async Task<IEnumerable<ThreadDto>> GetAllThreadsAsync(CancellationToken cancellationToken = default)
+    public async Task<PagedResultDto<ThreadDto>> GetAllThreadsAsync(
+        int page = 1,
+        int pageSize = 20,
+        string? q = null,
+        int? categoryId = null,
+        bool? isSolved = null,
+        int? userId = null,
+        string? sortBy = null,
+        string? sortDir = null,
+        CancellationToken cancellationToken = default)
     {
-        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
-            include: query => query.Include(t => t.User).Include(t => t.Category),
-            cancellationToken);
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
 
-        return threads.Select(MapToDto);
+        var threads = await _unitOfWork.Threads.GetAllAsync(cancellationToken);
+        IEnumerable<Threads> query = threads;
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            query = query.Where(t =>
+                (!string.IsNullOrEmpty(t.Title) && t.Title.Contains(q, StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrEmpty(t.Content) && t.Content.Contains(q, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (categoryId.HasValue)
+        {
+            query = query.Where(t => t.CategoryId == categoryId.Value);
+        }
+
+        if (isSolved.HasValue)
+        {
+            query = query.Where(t => t.IsSolved == isSolved.Value);
+        }
+
+        if (userId.HasValue)
+        {
+            query = query.Where(t => t.UserId == userId.Value);
+        }
+
+        var totalCount = query.Count();
+        var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? "viewCount" : sortBy.Trim();
+        var normalizedSortDir = string.IsNullOrWhiteSpace(sortDir) ? "desc" : sortDir.Trim();
+        var isAsc = string.Equals(normalizedSortDir, "asc", StringComparison.OrdinalIgnoreCase);
+
+        query = normalizedSortBy.ToLowerInvariant() switch
+        {
+            "createdat" => isAsc ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt),
+            "updatedat" => isAsc ? query.OrderBy(t => t.UpdatedAt) : query.OrderByDescending(t => t.UpdatedAt),
+            "title" => isAsc ? query.OrderBy(t => t.Title) : query.OrderByDescending(t => t.Title),
+            _ => isAsc ? query.OrderBy(t => t.ViewCount) : query.OrderByDescending(t => t.ViewCount)
+        };
+
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        var items = query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(MapToDto)
+            .ToList();
+
+        return new PagedResultDto<ThreadDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 
     public async Task<ThreadDto?> GetThreadByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
-            include: query => query.Include(t => t.User).Include(t => t.Category),
-            cancellationToken);
+        var thread = await _unitOfWork.Threads.GetByIdAsync(id, cancellationToken);
+        if (thread == null)
+        {
+            return null;
+        }
 
-        var thread = threads.FirstOrDefault(t => t.Id == id);
-        return thread == null ? null : MapToDto(thread);
+        // ViewCount: detay sayfası görüntülenince artır
+        thread.ViewCount++;
+        _unitOfWork.Threads.Update(thread);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return MapToDto(thread);
     }
 
     public async Task<ThreadDto> CreateThreadAsync(CreateThreadDto createThreadDto, CancellationToken cancellationToken = default)
@@ -112,10 +179,24 @@ public class ThreadService : IThreadService
 
     public async Task<bool> DeleteThreadAsync(int id, CancellationToken cancellationToken = default)
     {
+        var currentUserId = _currentUserService.GetCurrentUserId();
+        if (currentUserId == null)
+        {
+            throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
+        }
+
+        var currentRole = _currentUserService.GetCurrentUserRole();
+        var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
+
         var thread = await _unitOfWork.Threads.GetByIdAsync(id, cancellationToken);
         if (thread == null)
         {
             return false;
+        }
+
+        if (!isAdmin && thread.UserId != currentUserId.Value)
+        {
+            throw new UnauthorizedAccessException("Bu konuyu silme yetkiniz yok.");
         }
 
         var hasPosts = await _unitOfWork.Posts.AnyAsync(p => p.ThreadId == id, cancellationToken);

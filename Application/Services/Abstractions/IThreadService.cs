@@ -1,10 +1,20 @@
 using Application.DTOs.Thread;
+using Application.DTOs.Common;
 
 namespace Application.Services.Abstractions;
 
 public interface IThreadService
 {
-    Task<IEnumerable<ThreadDto>> GetAllThreadsAsync(CancellationToken cancellationToken = default);
+    Task<PagedResultDto<ThreadDto>> GetAllThreadsAsync(
+        int page = 1,
+        int pageSize = 20,
+        string? q = null,
+        int? categoryId = null,
+        bool? isSolved = null,
+        int? userId = null,
+        string? sortBy = null,
+        string? sortDir = null,
+        CancellationToken cancellationToken = default);
     Task<ThreadDto?> GetThreadByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<ThreadDto> CreateThreadAsync(CreateThreadDto createThreadDto, CancellationToken cancellationToken = default);
     Task<ThreadDto> UpdateThreadAsync(UpdateThreadDto updateThreadDto, CancellationToken cancellationToken = default);

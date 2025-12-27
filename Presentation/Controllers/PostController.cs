@@ -1,5 +1,6 @@
 using Application.DTOs.Post;
 using Application.Services.Abstractions;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Presentation.Controllers.Abstraction;
@@ -10,18 +11,33 @@ public class PostController : AppController
 {
     private readonly IPostService _postService;
     private readonly ILogger<PostController> _logger;
+    private readonly IValidator<CreatePostDto> _createValidator;
+    private readonly IValidator<UpdatePostDto> _updateValidator;
+    private readonly IValidator<MarkSolutionDto> _markSolutionValidator;
 
-    public PostController(IPostService postService, ILogger<PostController> logger)
+    public PostController(
+        IPostService postService,
+        ILogger<PostController> logger,
+        IValidator<CreatePostDto> createValidator,
+        IValidator<UpdatePostDto> updateValidator,
+        IValidator<MarkSolutionDto> markSolutionValidator)
     {
         _postService = postService;
         _logger = logger;
+        _createValidator = createValidator;
+        _updateValidator = updateValidator;
+        _markSolutionValidator = markSolutionValidator;
     }
 
     [HttpGet("getAll/{threadId}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetAllPostsByThreadId(int threadId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllPostsByThreadId(
+        int threadId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var posts = await _postService.GetAllPostsByThreadIdAsync(threadId, cancellationToken);
+        var posts = await _postService.GetAllPostsByThreadIdAsync(threadId, page, pageSize, cancellationToken);
         return Ok(posts);
     }
 
@@ -43,6 +59,20 @@ public class PostController : AppController
     [Authorize]
     public async Task<IActionResult> CreatePost([FromBody] CreatePostDto createPostDto, CancellationToken cancellationToken)
     {
+        var validationResult = await _createValidator.ValidateAsync(createPostDto, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
         try
         {
             var post = await _postService.CreatePostAsync(createPostDto, cancellationToken);
@@ -63,6 +93,20 @@ public class PostController : AppController
     [Authorize]
     public async Task<IActionResult> UpdatePost([FromBody] UpdatePostDto updatePostDto, CancellationToken cancellationToken)
     {
+        var validationResult = await _updateValidator.ValidateAsync(updatePostDto, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
         try
         {
             var post = await _postService.UpdatePostAsync(updatePostDto, cancellationToken);
@@ -104,6 +148,20 @@ public class PostController : AppController
     [Authorize]
     public async Task<IActionResult> MarkSolution([FromBody] MarkSolutionDto request, CancellationToken cancellationToken)
     {
+        var validationResult = await _markSolutionValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
         try
         {
             var result = await _postService.MarkSolutionAsync(request, cancellationToken);

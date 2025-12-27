@@ -91,6 +91,7 @@ public static class ServiceRegistration
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IThreadService, ThreadService>();
+        services.AddScoped<IPostService, PostService>();
 
         return services;
     }

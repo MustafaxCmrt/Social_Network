@@ -69,10 +69,24 @@ public class ThreadService : IThreadService
 
     public async Task<ThreadDto> UpdateThreadAsync(UpdateThreadDto updateThreadDto, CancellationToken cancellationToken = default)
     {
+        var currentUserId = _currentUserService.GetCurrentUserId();
+        if (currentUserId == null)
+        {
+            throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
+        }
+
+        var currentRole = _currentUserService.GetCurrentUserRole();
+        var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
+
         var thread = await _unitOfWork.Threads.GetByIdAsync(updateThreadDto.Id, cancellationToken);
         if (thread == null)
         {
             throw new KeyNotFoundException($"ID: {updateThreadDto.Id} olan konu bulunamadı.");
+        }
+
+        if (!isAdmin && thread.UserId != currentUserId.Value)
+        {
+            throw new UnauthorizedAccessException("Bu konuyu güncelleme yetkiniz yok.");
         }
 
         var category = await _unitOfWork.Categories.GetByIdAsync(updateThreadDto.CategoryId, cancellationToken);

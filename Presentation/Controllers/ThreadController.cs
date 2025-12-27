@@ -67,6 +67,11 @@ public class ThreadController : AppController
             var thread = await _threadService.UpdateThreadAsync(updateThreadDto, cancellationToken);
             return Ok(thread);
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Thread update forbidden");
+            return Forbid();
+        }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });

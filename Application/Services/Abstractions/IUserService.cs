@@ -48,4 +48,37 @@ public interface IUserService
     /// <param name="cancellationToken">İptal token'ı</param>
     /// <returns>Silme başarılıysa true, değilse false</returns>
     Task<bool> DeleteUserAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Giriş yapan kullanıcının kendi profil bilgilerini getirir
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Kullanıcı profil bilgileri</returns>
+    Task<GetUserDto?> GetMyProfileAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Public kullanıcı profili getirir (istatistiklerle)
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Public profil bilgileri</returns>
+    Task<UserProfileDto?> GetUserProfileAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Giriş yapan kullanıcının kendi profilini günceller
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="request">Güncellenmiş profil bilgileri</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Güncellenmiş profil bilgileri</returns>
+    Task<GetUserDto?> UpdateMyProfileAsync(int userId, UpdateMyProfileDto request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kullanıcının kendi hesabını siler (soft delete + email/username suffix)
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Silme başarılıysa true</returns>
+    Task<bool> DeleteMyAccountAsync(int userId, CancellationToken cancellationToken = default);
 }

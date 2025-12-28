@@ -234,4 +234,156 @@ public class UserService : IUserService
 
         return true;
     }
+
+    /// <summary>
+    /// Giriş yapan kullanıcının kendi profil bilgilerini getirir
+    /// </summary>
+    public async Task<GetUserDto?> GetMyProfileAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        return await GetUserByIdAsync(userId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Public kullanıcı profili getirir (thread/post sayılarıyla)
+    /// </summary>
+    public async Task<UserProfileDto?> GetUserProfileAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _unitOfWork.Users.FirstOrDefaultAsync(
+            u => u.Id == userId && !u.IsDeleted,
+            cancellationToken
+        );
+
+        if (user == null)
+            return null;
+
+        // Thread ve Post sayılarını al
+        var totalThreads = await _unitOfWork.Threads.CountAsync(
+            t => t.UserId == userId && !t.IsDeleted,
+            cancellationToken
+        );
+
+        var totalPosts = await _unitOfWork.Posts.CountAsync(
+            p => p.UserId == userId && !p.IsDeleted,
+            cancellationToken
+        );
+
+        return new UserProfileDto
+        {
+            UserId = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            Username = user.Username,
+            ProfileImg = user.ProfileImg,
+            Role = user.Role.ToString(),
+            CreatedAt = user.CreatedAt,
+            TotalThreads = totalThreads,
+            TotalPosts = totalPosts
+        };
+    }
+
+    /// <summary>
+    /// Giriş yapan kullanıcının kendi profilini günceller
+    /// Şifre değişikliği için mevcut şifre doğrulaması yapar
+    /// </summary>
+    public async Task<GetUserDto?> UpdateMyProfileAsync(int userId, UpdateMyProfileDto request, CancellationToken cancellationToken = default)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+
+        if (user == null || user.IsDeleted)
+            return null;
+
+        // 1. Username değiştiriliyorsa unique kontrolü
+        if (!string.IsNullOrWhiteSpace(request.Username) && request.Username != user.Username)
+        {
+            var usernameExists = await _unitOfWork.Users.AnyAsync(
+                u => u.Username == request.Username && u.Id != userId && !u.IsDeleted,
+                cancellationToken
+            );
+
+            if (usernameExists)
+                throw new InvalidOperationException("Bu kullanıcı adı zaten kullanılıyor");
+
+            user.Username = request.Username;
+        }
+
+        // 2. Email değiştiriliyorsa unique kontrolü
+        if (!string.IsNullOrWhiteSpace(request.Email) && request.Email != user.Email)
+        {
+            var emailExists = await _unitOfWork.Users.AnyAsync(
+                u => u.Email == request.Email && u.Id != userId && !u.IsDeleted,
+                cancellationToken
+            );
+
+            if (emailExists)
+                throw new InvalidOperationException("Bu email adresi zaten kullanılıyor");
+
+            user.Email = request.Email;
+        }
+
+        // 3. Temel bilgileri güncelle
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+
+        if (!string.IsNullOrWhiteSpace(request.ProfileImg))
+        {
+            user.ProfileImg = request.ProfileImg;
+        }
+
+        // 4. Şifre değişikliği
+        if (!string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            // Mevcut şifre kontrolü
+            if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+            {
+                throw new UnauthorizedAccessException("Şifre değiştirmek için mevcut şifrenizi girmelisiniz");
+            }
+
+            // Mevcut şifre doğrulama
+            if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+            {
+                throw new UnauthorizedAccessException("Mevcut şifre hatalı");
+            }
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            
+            // Şifre değiştiğinde refresh token versiyonunu artır (güvenlik)
+            user.RefreshTokenVersion++;
+        }
+
+        // 5. UpdatedAt güncelle
+        user.UpdatedAt = DateTime.UtcNow;
+
+        // 6. Veritabanına kaydet
+        _unitOfWork.Users.Update(user);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return await GetUserByIdAsync(userId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Kullanıcının kendi hesabını siler
+    /// Email ve Username'e suffix ekleyerek aynı bilgilerle yeni hesap açılabilmesini sağlar
+    /// </summary>
+    public async Task<bool> DeleteMyAccountAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+
+        if (user == null || user.IsDeleted)
+            return false;
+
+        // Email ve Username'e timestamp suffix ekle (unique constraint bypass)
+        var timestamp = DateTime.UtcNow.Ticks;
+        user.Email = $"{user.Email}_DELETED_{timestamp}";
+        user.Username = $"{user.Username}_DELETED_{timestamp}";
+
+        // Soft delete
+        user.IsDeleted = true;
+        user.DeletedDate = DateTime.UtcNow;
+        user.IsActive = false;
+
+        _unitOfWork.Users.Update(user);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
 }

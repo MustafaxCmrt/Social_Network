@@ -56,6 +56,11 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
         return await _dbSet.AnyAsync(predicate, cancellationToken);
     }
 
+    public async Task<int> CountAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.CountAsync(predicate, cancellationToken);
+    }
+
     // CREATE OPERASYONLARI
     public async Task CreateAsync(T entity, CancellationToken cancellationToken = default)
     {

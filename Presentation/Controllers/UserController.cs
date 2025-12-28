@@ -17,15 +17,18 @@ public class UserController : AppController
     private readonly IUserService _userService;
     private readonly IValidator<CreateUserDto> _createValidator;
     private readonly IValidator<UpdateUserDto> _updateValidator;
+    private readonly IValidator<UpdateMyProfileDto> _updateMyProfileValidator;
 
     public UserController(
         IUserService userService,
         IValidator<CreateUserDto> createValidator,
-        IValidator<UpdateUserDto> updateValidator)
+        IValidator<UpdateUserDto> updateValidator,
+        IValidator<UpdateMyProfileDto> updateMyProfileValidator)
     {
         _userService = userService;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
+        _updateMyProfileValidator = updateMyProfileValidator;
     }
 
     /// <summary>
@@ -224,5 +227,129 @@ public class UserController : AppController
         }
 
         return Ok(new { message = "Kullanıcı başarıyla silindi" });
+    }
+
+    /// <summary>
+    /// Giriş yapan kullanıcının kendi profil bilgilerini getirir
+    /// </summary>
+    /// <returns>200 OK - Kendi profil bilgileri</returns>
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(GetUserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyProfile()
+    {
+        var currentUserIdClaim = User.FindFirst("UserId")?.Value;
+
+        if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out int currentUserId))
+            return Unauthorized(new { message = "Geçersiz token" });
+
+        var user = await _userService.GetMyProfileAsync(currentUserId, HttpContext.RequestAborted);
+
+        if (user == null)
+        {
+            return NotFound(new { message = "Kullanıcı bulunamadı" });
+        }
+
+        return Ok(user);
+    }
+
+    /// <summary>
+    /// Public kullanıcı profili getirir (thread/post istatistikleriyle)
+    /// </summary>
+    /// <param name="id">Kullanıcı ID'si</param>
+    /// <returns>200 OK - Public profil</returns>
+    [HttpGet("profile/{id}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUserProfile(int id)
+    {
+        var profile = await _userService.GetUserProfileAsync(id, HttpContext.RequestAborted);
+
+        if (profile == null)
+        {
+            return NotFound(new { message = "Kullanıcı bulunamadı" });
+        }
+
+        return Ok(profile);
+    }
+
+    /// <summary>
+    /// Giriş yapan kullanıcının kendi profilini günceller
+    /// </summary>
+    /// <param name="request">Güncellenmiş profil bilgileri</param>
+    /// <returns>200 OK - Güncellenmiş profil</returns>
+    [HttpPut("me")]
+    [ProducesResponseType(typeof(GetUserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateMyProfileDto request)
+    {
+        // 1. Validation
+        var validationResult = await _updateMyProfileValidator.ValidateAsync(request);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new
+                {
+                    Field = e.PropertyName,
+                    Error = e.ErrorMessage
+                })
+            });
+        }
+
+        // 2. Token'dan currentUserId al
+        var currentUserIdClaim = User.FindFirst("UserId")?.Value;
+
+        if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out int currentUserId))
+            return Unauthorized(new { message = "Geçersiz token" });
+
+        try
+        {
+            var result = await _userService.UpdateMyProfileAsync(currentUserId, request, HttpContext.RequestAborted);
+
+            if (result == null)
+            {
+                return NotFound(new { message = "Kullanıcı bulunamadı" });
+            }
+
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Kullanıcının kendi hesabını siler (soft delete + email/username suffix)
+    /// </summary>
+    /// <returns>200 OK - Hesap silindi</returns>
+    [HttpDelete("me")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteMyAccount()
+    {
+        var currentUserIdClaim = User.FindFirst("UserId")?.Value;
+
+        if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out int currentUserId))
+            return Unauthorized(new { message = "Geçersiz token" });
+
+        var result = await _userService.DeleteMyAccountAsync(currentUserId, HttpContext.RequestAborted);
+
+        if (!result)
+        {
+            return NotFound(new { message = "Kullanıcı bulunamadı veya zaten silinmiş" });
+        }
+
+        return Ok(new { message = "Hesabınız başarıyla silindi" });
     }
 }

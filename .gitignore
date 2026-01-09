@@ -176,3 +176,7 @@ Desktop.ini
 
 agent.md
 instructions.json
+# Uploaded files (images, documents etc.)
+# Keep directory structure but ignore uploaded files
+Presentation/wwwroot/uploads/*
+!Presentation/wwwroot/uploads/*/.gitkeep

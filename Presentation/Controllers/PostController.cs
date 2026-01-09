@@ -10,6 +10,7 @@ namespace Presentation.Controllers;
 public class PostController : AppController
 {
     private readonly IPostService _postService;
+    private readonly IFileService _fileService;
     private readonly ILogger<PostController> _logger;
     private readonly IValidator<CreatePostDto> _createValidator;
     private readonly IValidator<UpdatePostDto> _updateValidator;
@@ -17,12 +18,14 @@ public class PostController : AppController
 
     public PostController(
         IPostService postService,
+        IFileService fileService,
         ILogger<PostController> logger,
         IValidator<CreatePostDto> createValidator,
         IValidator<UpdatePostDto> updateValidator,
         IValidator<MarkSolutionDto> markSolutionValidator)
     {
         _postService = postService;
+        _fileService = fileService;
         _logger = logger;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
@@ -179,6 +182,57 @@ public class PostController : AppController
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Post için resim yükler
+    /// </summary>
+    /// <param name="file">Yüklenecek resim dosyası</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Resim başarıyla yüklendi, URL döner
+    /// 400 Bad Request - Geçersiz dosya (boyut/uzantı)
+    /// 401 Unauthorized - Kullanıcı giriş yapmamış
+    /// </returns>
+    [HttpPost("upload-image")]
+    [Authorize]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UploadImage(IFormFile file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // 1. Dosya kontrolü
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { message = "Dosya yüklenemedi" });
+            }
+
+            // 2. Uzantı kontrolü
+            if (!_fileService.IsValidImageExtension(file.FileName))
+            {
+                return BadRequest(new { message = "Sadece .jpg, .jpeg, .png, .gif uzantılı dosyalar yüklenebilir" });
+            }
+
+            // 3. Boyut kontrolü
+            if (!_fileService.IsValidFileSize(file.Length))
+            {
+                return BadRequest(new { message = "Dosya boyutu maksimum 5 MB olabilir" });
+            }
+
+            // 4. Dosyayı yükle
+            var imageUrl = await _fileService.UploadImageAsync(file, "posts", cancellationToken);
+
+            _logger.LogInformation("Post resmi yüklendi: {ImageUrl}", imageUrl);
+
+            return Ok(new { imageUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Resim yükleme hatası");
+            return BadRequest(new { message = "Resim yüklenirken bir hata oluştu" });
         }
     }
 }

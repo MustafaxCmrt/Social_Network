@@ -73,6 +73,10 @@ try
     }
 
     app.UseHttpsRedirection();
+    
+    // Static files middleware - Uploaded dosyaların servis edilmesi için
+    app.UseStaticFiles();
+    
     app.UseCors("AllowAll");
     app.UseRateLimiter();
     app.UseAuthentication();

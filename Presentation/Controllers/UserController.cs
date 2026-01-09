@@ -15,17 +15,23 @@ namespace Presentation.Controllers;
 public class UserController : AppController
 {
     private readonly IUserService _userService;
+    private readonly IFileService _fileService;
+    private readonly ILogger<UserController> _logger;
     private readonly IValidator<CreateUserDto> _createValidator;
     private readonly IValidator<UpdateUserDto> _updateValidator;
     private readonly IValidator<UpdateMyProfileDto> _updateMyProfileValidator;
 
     public UserController(
         IUserService userService,
+        IFileService fileService,
+        ILogger<UserController> logger,
         IValidator<CreateUserDto> createValidator,
         IValidator<UpdateUserDto> updateValidator,
         IValidator<UpdateMyProfileDto> updateMyProfileValidator)
     {
         _userService = userService;
+        _fileService = fileService;
+        _logger = logger;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
         _updateMyProfileValidator = updateMyProfileValidator;
@@ -351,5 +357,56 @@ public class UserController : AppController
         }
 
         return Ok(new { message = "Hesabınız başarıyla silindi" });
+    }
+
+    /// <summary>
+    /// Profil resmi yükler
+    /// </summary>
+    /// <param name="file">Yüklenecek profil resmi</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Resim başarıyla yüklendi, URL döner
+    /// 400 Bad Request - Geçersiz dosya (boyut/uzantı)
+    /// 401 Unauthorized - Kullanıcı giriş yapmamış
+    /// </returns>
+    [HttpPost("upload-profile-image")]
+    [Authorize]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UploadProfileImage(IFormFile file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // 1. Dosya kontrolü
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { message = "Dosya yüklenemedi" });
+            }
+
+            // 2. Uzantı kontrolü
+            if (!_fileService.IsValidImageExtension(file.FileName))
+            {
+                return BadRequest(new { message = "Sadece .jpg, .jpeg, .png, .gif uzantılı dosyalar yüklenebilir" });
+            }
+
+            // 3. Boyut kontrolü
+            if (!_fileService.IsValidFileSize(file.Length))
+            {
+                return BadRequest(new { message = "Dosya boyutu maksimum 5 MB olabilir" });
+            }
+
+            // 4. Dosyayı yükle
+            var imageUrl = await _fileService.UploadImageAsync(file, "profiles", cancellationToken);
+
+            _logger.LogInformation("Profil resmi yüklendi: {ImageUrl}", imageUrl);
+
+            return Ok(new { imageUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Profil resmi yükleme hatası");
+            return BadRequest(new { message = "Resim yüklenirken bir hata oluştu" });
+        }
     }
 }

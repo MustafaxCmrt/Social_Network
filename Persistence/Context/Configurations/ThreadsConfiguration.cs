@@ -30,6 +30,10 @@ public class ThreadsConfiguration : IEntityTypeConfiguration<Threads>
         builder.Property(t => t.IsSolved)
             .IsRequired()
             .HasDefaultValue(false);
+        
+        builder.Property(t => t.PostCount)
+            .IsRequired()
+            .HasDefaultValue(0);
 
         builder.Property(t => t.UserId)
             .IsRequired();

@@ -25,6 +25,13 @@ public class PostsConfiguration : IEntityTypeConfiguration<Posts>
         builder.Property(p => p.IsSolution)
             .IsRequired()
             .HasDefaultValue(false);
+        
+        builder.Property(p => p.UpvoteCount)
+            .IsRequired()
+            .HasDefaultValue(0);
+        
+        builder.Property(p => p.ParentPostId)
+            .IsRequired(false); // Nullable - null = ana yorum, dolu = cevap
 
         builder.Property(p => p.ThreadId)
             .IsRequired();
@@ -71,7 +78,20 @@ public class PostsConfiguration : IEntityTypeConfiguration<Posts>
 
         builder.HasIndex(p => p.CreatedAt)
             .HasDatabaseName("IX_Posts_CreatedAt");
+        
+        builder.HasIndex(p => p.ParentPostId)
+            .HasDatabaseName("IX_Posts_ParentPostId");
+        
+        builder.HasIndex(p => p.UpvoteCount)
+            .HasDatabaseName("IX_Posts_UpvoteCount");
 
-        // Relationships - Foreign keys (ThreadsConfiguration ve UsersConfiguration'da tanımlandı)
+        // Relationships
+        // Self-referencing relationship - Yoruma cevap
+        builder.HasOne(p => p.ParentPost)
+            .WithMany(p => p.Replies)
+            .HasForeignKey(p => p.ParentPostId)
+            .OnDelete(DeleteBehavior.Restrict); // Üst yorum silinince alt yorumlar silinmez (orphan kalır)
+        
+        // Diğer foreign key'ler ThreadsConfiguration ve UsersConfiguration'da tanımlandı
     }
 }

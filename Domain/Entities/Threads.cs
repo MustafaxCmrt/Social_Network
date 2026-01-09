@@ -8,6 +8,7 @@ public class Threads : BaseEntity
     public string Content { get; set; } = null!; // Zorunlu - içerik olmalı
     public int ViewCount { get; set; } = 0; // Zorunlu - başlangıçta 0
     public bool IsSolved { get; set; } = false; // Zorunlu - başlangıçta çözülmemiş
+    public int PostCount { get; set; } = 0; // Zorunlu - başlangıçta 0 yorum
     
     public int UserId { get; set; } // Foreign Key - Zorunlu
     public int CategoryId { get; set; } // Foreign Key - Zorunlu
@@ -21,4 +22,7 @@ public class Threads : BaseEntity
 
     // Bir konunun altında birden fazla cevap (Post) olabilir:
     public ICollection<Posts> Posts { get; set; } = new List<Posts>();
+    
+    // Bu thread ile ilgili bildirimler
+    public ICollection<Notifications> Notifications { get; set; } = new List<Notifications>();
 }

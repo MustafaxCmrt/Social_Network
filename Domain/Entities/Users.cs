@@ -23,4 +23,13 @@ public class Users : BaseEntity
     
     // Bir kullanıcının birden fazla mesajı (cevabı) olabilir:
     public ICollection<Posts> Posts { get; set; } = new List<Posts>();
+    
+    // Bir kullanıcının verdiği upvote'lar:
+    public ICollection<PostVotes> PostVotes { get; set; } = new List<PostVotes>();
+    
+    // Kullanıcıya gelen bildirimler:
+    public ICollection<Notifications> ReceivedNotifications { get; set; } = new List<Notifications>();
+    
+    // Kullanıcının tetiklediği bildirimler (başkasına yorum yapınca o bildirim bu kullanıcı actor olur):
+    public ICollection<Notifications> TriggeredNotifications { get; set; } = new List<Notifications>();
 }

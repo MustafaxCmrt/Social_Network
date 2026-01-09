@@ -20,6 +20,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Posts> Posts { get; set; }
     public DbSet<Threads> Threads { get; set; }
     public DbSet<Categories> Categories { get; set; }
+    public DbSet<PostVotes> PostVotes { get; set; }
+    public DbSet<Notifications> Notifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +35,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Posts>().HasQueryFilter(p => !p.IsDeleted);
         modelBuilder.Entity<Threads>().HasQueryFilter(t => !t.IsDeleted);
         modelBuilder.Entity<Categories>().HasQueryFilter(c => !c.IsDeleted);
+        modelBuilder.Entity<PostVotes>().HasQueryFilter(pv => !pv.IsDeleted);
+        modelBuilder.Entity<Notifications>().HasQueryFilter(n => !n.IsDeleted);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

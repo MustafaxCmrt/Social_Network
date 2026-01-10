@@ -9,5 +9,10 @@ public interface ICategoryService
     Task<CategoryDto?> GetCategoryBySlugAsync(string slug, CancellationToken cancellationToken = default);
     Task<CategoryDto> CreateCategoryAsync(CreateCategoryDto createCategoryDto, CancellationToken cancellationToken = default);
     Task<CategoryDto> UpdateCategoryAsync(int id, UpdateCategoryDto updateCategoryDto, CancellationToken cancellationToken = default);
-    Task<bool> DeleteCategoryAsync(int id, CancellationToken cancellationToken = default);
+    Task<bool> DeleteCategoryAsync(int id, bool force = false, CancellationToken cancellationToken = default);
+    
+    // Alt Kategori Metodları
+    Task<List<CategoryTreeDto>> GetCategoryTreeAsync(CancellationToken cancellationToken = default);
+    Task<IEnumerable<CategoryDto>> GetSubCategoriesAsync(int parentId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<CategoryDto>> GetRootCategoriesAsync(CancellationToken cancellationToken = default);
 }

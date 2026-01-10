@@ -60,7 +60,7 @@ public class CategoryController : AppController
 
     // POST: api/Category
     [HttpPost("create")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateCategory(
         [FromBody] CreateCategoryDto createCategoryDto,
         CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ public class CategoryController : AppController
 
     // PUT: api/Category/5
     [HttpPut("update")]
-    [Authorize(Roles = "Admin,Moderator")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateCategory(
         [FromBody] UpdateCategoryDto updateCategoryDto,
         CancellationToken cancellationToken)
@@ -101,14 +101,14 @@ public class CategoryController : AppController
         }
     }
 
-    // DELETE: api/Category/5
+    // DELETE: api/Category/5?force=true
     [HttpDelete("delete")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> DeleteCategory(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteCategory(int id, CancellationToken cancellationToken, [FromQuery] bool force = false)
     {
         try
         {
-            var result = await _categoryService.DeleteCategoryAsync(id, cancellationToken);
+            var result = await _categoryService.DeleteCategoryAsync(id, force, cancellationToken);
             
             if (!result)
             {
@@ -121,5 +121,41 @@ public class CategoryController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+    
+    // GET: api/Category/tree
+    /// <summary>
+    /// Tüm kategorileri hiyerarşik tree yapısında getirir
+    /// </summary>
+    [HttpGet("tree")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetCategoryTree(CancellationToken cancellationToken)
+    {
+        var tree = await _categoryService.GetCategoryTreeAsync(cancellationToken);
+        return Ok(tree);
+    }
+    
+    // GET: api/Category/{id}/subcategories
+    /// <summary>
+    /// Belirtilen kategorinin alt kategorilerini getirir
+    /// </summary>
+    [HttpGet("{id}/subcategories")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetSubCategories(int id, CancellationToken cancellationToken)
+    {
+        var subCategories = await _categoryService.GetSubCategoriesAsync(id, cancellationToken);
+        return Ok(subCategories);
+    }
+    
+    // GET: api/Category/root
+    /// <summary>
+    /// Sadece ana kategorileri getirir (üst kategorisi olmayan)
+    /// </summary>
+    [HttpGet("root")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetRootCategories(CancellationToken cancellationToken)
+    {
+        var rootCategories = await _categoryService.GetRootCategoriesAsync(cancellationToken);
+        return Ok(rootCategories);
     }
 }

@@ -21,4 +21,7 @@ public interface IPostService
     Task<UpvoteResponseDto> UpvotePostAsync(int postId, int userId, CancellationToken cancellationToken = default);
     Task<UpvoteResponseDto> RemoveUpvoteAsync(int postId, int userId, CancellationToken cancellationToken = default);
     Task<VoteStatusDto> GetVoteStatusAsync(int postId, int userId, CancellationToken cancellationToken = default);
+    
+    // Nested comment işlemleri
+    Task<PagedResultDto<PostDto>> GetPostRepliesAsync(int postId, int page, int pageSize, CancellationToken cancellationToken = default);
 }

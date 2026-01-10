@@ -1,6 +1,7 @@
 using Application.DTOs.Thread;
 using Application.Services.Abstractions;
 using Application.DTOs.Common;
+using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Services;
 using Persistence.UnitOfWork;
@@ -58,7 +59,7 @@ public class ThreadService : IThreadService
             query = query.Where(t => t.UserId == userId.Value);
         }
 
-        var totalCount = query.Count();
+        // Sıralama
         var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? "viewCount" : sortBy.Trim();
         var normalizedSortDir = string.IsNullOrWhiteSpace(sortDir) ? "desc" : sortDir.Trim();
         var isAsc = string.Equals(normalizedSortDir, "asc", StringComparison.OrdinalIgnoreCase);
@@ -71,21 +72,8 @@ public class ThreadService : IThreadService
             _ => isAsc ? query.OrderBy(t => t.ViewCount) : query.OrderByDescending(t => t.ViewCount)
         };
 
-        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-        var items = query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(MapToDto)
-            .ToList();
-
-        return new PagedResultDto<ThreadDto>
-        {
-            Items = items,
-            Page = page,
-            PageSize = pageSize,
-            TotalCount = totalCount,
-            TotalPages = totalPages
-        };
+        // Extension metod ile sayfalandır
+        return query.ToPagedResult(page, pageSize, MapToDto);
     }
 
     public async Task<ThreadDto?> GetThreadByIdAsync(int id, CancellationToken cancellationToken = default)

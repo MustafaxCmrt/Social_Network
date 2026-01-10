@@ -1,5 +1,6 @@
 using Application.DTOs.Post;
 using Application.DTOs.Common;
+using Application.Common.Extensions;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Services;
@@ -24,34 +25,20 @@ public class PostService : IPostService
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var posts = await _unitOfWork.Posts.FindAsync(p => p.ThreadId == threadId, cancellationToken);
+        // Sadece ana yorumları getir (ParentPostId = null)
+        var posts = await _unitOfWork.Posts.FindAsync(
+            p => p.ThreadId == threadId && p.ParentPostId == null, 
+            cancellationToken);
 
-        var normalizedPage = page < 1 ? 1 : page;
-        var normalizedPageSize = pageSize < 1 ? 20 : pageSize;
-
+        // Sırala ve sayfalandır
         var ordered = posts
             .OrderByDescending(p => p.IsSolution)
+            .ThenByDescending(p => p.UpvoteCount) // En çok beğenileni üste
             .ThenByDescending(p => p.CreatedAt)
-            .ThenBy(p => p.Id)
-            .ToList();
+            .ThenBy(p => p.Id);
 
-        var totalCount = ordered.Count;
-        var totalPages = (int)Math.Ceiling(totalCount / (double)normalizedPageSize);
-
-        var items = ordered
-            .Skip((normalizedPage - 1) * normalizedPageSize)
-            .Take(normalizedPageSize)
-            .Select(MapToDto)
-            .ToList();
-
-        return new PagedResultDto<PostDto>
-        {
-            Items = items,
-            Page = normalizedPage,
-            PageSize = normalizedPageSize,
-            TotalCount = totalCount,
-            TotalPages = totalPages
-        };
+        // Extension metod ile sayfalandır
+        return ordered.ToPagedResult(page, pageSize, MapToDto);
     }
 
     public async Task<PostDto?> GetPostByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -74,16 +61,47 @@ public class PostService : IPostService
             throw new KeyNotFoundException($"Konu ID: {createPostDto.ThreadId} bulunamadı.");
         }
 
+        // ParentPostId varsa, ana yorumun varlığını kontrol et
+        if (createPostDto.ParentPostId.HasValue)
+        {
+            var parentPost = await _unitOfWork.Posts.GetByIdAsync(createPostDto.ParentPostId.Value, cancellationToken);
+            if (parentPost == null)
+            {
+                throw new KeyNotFoundException($"Cevap verilecek yorum ID: {createPostDto.ParentPostId} bulunamadı.");
+            }
+
+            // ParentPost'un ThreadId ile uyumlu olduğunu kontrol et
+            if (parentPost.ThreadId != createPostDto.ThreadId)
+            {
+                throw new InvalidOperationException("Cevap verilecek yorum farklı bir konuya ait.");
+            }
+
+            // Sadece 1 seviye cevap izni (ana yoruma cevap, cevaba cevap yok)
+            if (parentPost.ParentPostId.HasValue)
+            {
+                throw new InvalidOperationException("Cevaba cevap verilemez. Sadece ana yorumlara cevap verebilirsiniz.");
+            }
+        }
+
         var post = new Posts
         {
             ThreadId = createPostDto.ThreadId,
             UserId = currentUserId.Value,
             Content = createPostDto.Content,
             Img = createPostDto.Img,
+            ParentPostId = createPostDto.ParentPostId,
             IsSolution = false
         };
 
         await _unitOfWork.Posts.CreateAsync(post, cancellationToken);
+        
+        // Thread'in PostCount'unu artır (ana yorum ise)
+        if (!createPostDto.ParentPostId.HasValue)
+        {
+            thread.PostCount++;
+            _unitOfWork.Threads.Update(thread);
+        }
+        
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return MapToDto(post);
@@ -338,8 +356,42 @@ public class PostService : IPostService
         };
     }
 
-    private static PostDto MapToDto(Posts post)
+    public async Task<PagedResultDto<PostDto>> GetPostRepliesAsync(
+        int postId, 
+        int page, 
+        int pageSize, 
+        CancellationToken cancellationToken = default)
     {
+        // 1. Ana yorum var mı kontrol et
+        var parentPost = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
+        if (parentPost == null)
+        {
+            throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
+        }
+
+        // 2. Bu yorumun cevaplarını getir
+        var replies = await _unitOfWork.Posts.FindAsync(
+            p => p.ParentPostId == postId, 
+            cancellationToken);
+
+        // 3. En çok beğenilene göre sırala ve sayfalandır
+        var ordered = replies
+            .OrderByDescending(p => p.UpvoteCount)
+            .ThenByDescending(p => p.CreatedAt)
+            .ThenBy(p => p.Id);
+
+        // Extension metod ile sayfalandır
+        return ordered.ToPagedResult(page, pageSize, MapToDto);
+    }
+
+    private PostDto MapToDto(Posts post)
+    {
+        // Reply count hesapla (senkron - zaten bellekteki liste üzerinden)
+        var replyCount = _unitOfWork.Posts
+            .FindAsync(p => p.ParentPostId == post.Id)
+            .Result
+            .Count();
+
         return new PostDto
         {
             Id = post.Id,
@@ -348,6 +400,9 @@ public class PostService : IPostService
             Content = post.Content,
             Img = post.Img,
             IsSolution = post.IsSolution,
+            UpvoteCount = post.UpvoteCount,
+            ParentPostId = post.ParentPostId,
+            ReplyCount = replyCount,
             CreatedAt = post.CreatedAt,
             UpdatedAt = post.UpdatedAt
         };

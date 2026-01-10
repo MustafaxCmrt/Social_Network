@@ -1,4 +1,5 @@
 using Application.DTOs.Post;
+using Application.DTOs.Common;
 using Application.Services.Abstractions;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
@@ -56,6 +57,38 @@ public class PostController : AppController
         }
 
         return Ok(post);
+    }
+
+    /// <summary>
+    /// Bir yorumun altındaki cevapları getirir
+    /// </summary>
+    /// <param name="id">Ana yorumun ID'si</param>
+    /// <param name="page">Sayfa numarası (varsayılan: 1)</param>
+    /// <param name="pageSize">Sayfa başına öğe sayısı (varsayılan: 20)</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Cevaplar listesi
+    /// 404 Not Found - Ana yorum bulunamadı
+    /// </returns>
+    [HttpGet("{id}/replies")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(PagedResultDto<PostDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPostReplies(
+        int id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var replies = await _postService.GetPostRepliesAsync(id, page, pageSize, cancellationToken);
+            return Ok(replies);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpPost("create")]

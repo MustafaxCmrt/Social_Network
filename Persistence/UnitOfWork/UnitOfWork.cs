@@ -17,6 +17,8 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<Posts>? _posts;
     private IRepository<Threads>? _threads;
     private IRepository<Categories>? _categories;
+    private IRepository<PostVotes>? _postVotes;
+    private IRepository<Notifications>? _notifications;
 
     public UnitOfWork(ApplicationDbContext context, ICurrentUserService? currentUserService)
     {
@@ -29,6 +31,8 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<Posts> Posts => _posts ??= new Repository<Posts>(_context);
     public IRepository<Threads> Threads => _threads ??= new Repository<Threads>(_context);
     public IRepository<Categories> Categories => _categories ??= new Repository<Categories>(_context);
+    public IRepository<PostVotes> PostVotes => _postVotes ??= new Repository<PostVotes>(_context);
+    public IRepository<Notifications> Notifications => _notifications ??= new Repository<Notifications>(_context);
 
     // SaveChanges
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

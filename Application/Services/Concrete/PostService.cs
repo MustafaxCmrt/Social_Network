@@ -218,6 +218,126 @@ public class PostService : IPostService
         }
     }
 
+    public async Task<UpvoteResponseDto> UpvotePostAsync(int postId, int userId, CancellationToken cancellationToken = default)
+    {
+        // 1. Post var mı kontrol et
+        var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
+        if (post == null)
+        {
+            throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
+        }
+
+        // 2. Daha önce upvote vermişmi kontrol et
+        var existingVote = (await _unitOfWork.PostVotes.FindAsync(
+            pv => pv.PostId == postId && pv.UserId == userId,
+            cancellationToken)).FirstOrDefault();
+
+        if (existingVote != null)
+        {
+            // Zaten beğenmiş
+            return new UpvoteResponseDto
+            {
+                PostId = postId,
+                IsUpvoted = true,
+                TotalUpvotes = post.UpvoteCount,
+                Message = "Bu yorumu zaten beğendiniz"
+            };
+        }
+
+        // 3. Yeni upvote ekle
+        var vote = new PostVotes
+        {
+            PostId = postId,
+            UserId = userId
+        };
+        await _unitOfWork.PostVotes.CreateAsync(vote, cancellationToken);
+
+        // 4. Post'un upvote count'unu artır
+        post.UpvoteCount++;
+        _unitOfWork.Posts.Update(post);
+
+        // 5. Kaydet
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new UpvoteResponseDto
+        {
+            PostId = postId,
+            IsUpvoted = true,
+            TotalUpvotes = post.UpvoteCount,
+            Message = "Yorum beğenildi"
+        };
+    }
+
+    public async Task<UpvoteResponseDto> RemoveUpvoteAsync(int postId, int userId, CancellationToken cancellationToken = default)
+    {
+        // 1. Post var mı kontrol et
+        var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
+        if (post == null)
+        {
+            throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
+        }
+
+        // 2. Upvote var mı kontrol et
+        var existingVote = (await _unitOfWork.PostVotes.FindAsync(
+            pv => pv.PostId == postId && pv.UserId == userId,
+            cancellationToken)).FirstOrDefault();
+
+        if (existingVote == null)
+        {
+            // Zaten beğenmemiş
+            return new UpvoteResponseDto
+            {
+                PostId = postId,
+                IsUpvoted = false,
+                TotalUpvotes = post.UpvoteCount,
+                Message = "Bu yorumu zaten beğenmemiştiniz"
+            };
+        }
+
+        // 3. Upvote'u sil
+        _unitOfWork.PostVotes.Delete(existingVote);
+
+        // 4. Post'un upvote count'unu azalt
+        if (post.UpvoteCount > 0)
+        {
+            post.UpvoteCount--;
+            _unitOfWork.Posts.Update(post);
+        }
+
+        // 5. Kaydet
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new UpvoteResponseDto
+        {
+            PostId = postId,
+            IsUpvoted = false,
+            TotalUpvotes = post.UpvoteCount,
+            Message = "Beğeni geri alındı"
+        };
+    }
+
+    public async Task<VoteStatusDto> GetVoteStatusAsync(int postId, int userId, CancellationToken cancellationToken = default)
+    {
+        // 1. Post var mı kontrol et
+        var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
+        if (post == null)
+        {
+            throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
+        }
+
+        // 2. Kullanıcı beğenmiş mi kontrol et
+        var vote = (await _unitOfWork.PostVotes.FindAsync(
+            pv => pv.PostId == postId && pv.UserId == userId,
+            cancellationToken)).FirstOrDefault();
+
+        return new VoteStatusDto
+        {
+            PostId = postId,
+            IsUpvoted = vote != null,
+            TotalUpvotes = post.UpvoteCount
+        };
+    }
+
     private static PostDto MapToDto(Posts post)
     {
         return new PostDto

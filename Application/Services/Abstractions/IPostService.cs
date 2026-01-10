@@ -16,4 +16,9 @@ public interface IPostService
     Task<bool> DeletePostAsync(int id, CancellationToken cancellationToken = default);
 
     Task<bool> MarkSolutionAsync(MarkSolutionDto request, CancellationToken cancellationToken = default);
+    
+    // Upvote işlemleri
+    Task<UpvoteResponseDto> UpvotePostAsync(int postId, int userId, CancellationToken cancellationToken = default);
+    Task<UpvoteResponseDto> RemoveUpvoteAsync(int postId, int userId, CancellationToken cancellationToken = default);
+    Task<VoteStatusDto> GetVoteStatusAsync(int postId, int userId, CancellationToken cancellationToken = default);
 }

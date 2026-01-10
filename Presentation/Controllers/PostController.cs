@@ -235,4 +235,128 @@ public class PostController : AppController
             return BadRequest(new { message = "Resim yüklenirken bir hata oluştu" });
         }
     }
+
+    /// <summary>
+    /// Post'a upvote (beğeni) verir
+    /// </summary>
+    /// <param name="id">Post ID</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Upvote verildi
+    /// 400 Bad Request - Zaten beğenilmiş
+    /// 401 Unauthorized - Giriş yapılmamış
+    /// 404 Not Found - Post bulunamadı
+    /// </returns>
+    [HttpPost("{id}/upvote")]
+    [Authorize]
+    [ProducesResponseType(typeof(UpvoteResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpvotePost(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Mevcut kullanıcı ID'sini al
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Geçersiz token" });
+            }
+
+            var result = await _postService.UpvotePostAsync(id, userId, cancellationToken);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Upvote hatası - PostId: {PostId}", id);
+            return BadRequest(new { message = "Upvote işlemi başarısız" });
+        }
+    }
+
+    /// <summary>
+    /// Post'tan upvote'u geri alır
+    /// </summary>
+    /// <param name="id">Post ID</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Upvote geri alındı
+    /// 400 Bad Request - Zaten beğenilmemiş
+    /// 401 Unauthorized - Giriş yapılmamış
+    /// 404 Not Found - Post bulunamadı
+    /// </returns>
+    [HttpDelete("{id}/upvote")]
+    [Authorize]
+    [ProducesResponseType(typeof(UpvoteResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveUpvote(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Mevcut kullanıcı ID'sini al
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Geçersiz token" });
+            }
+
+            var result = await _postService.RemoveUpvoteAsync(id, userId, cancellationToken);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Remove upvote hatası - PostId: {PostId}", id);
+            return BadRequest(new { message = "Upvote geri alma işlemi başarısız" });
+        }
+    }
+
+    /// <summary>
+    /// Kullanıcının post'a verdiği upvote durumunu getirir
+    /// </summary>
+    /// <param name="id">Post ID</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Upvote durumu
+    /// 401 Unauthorized - Giriş yapılmamış
+    /// 404 Not Found - Post bulunamadı
+    /// </returns>
+    [HttpGet("{id}/vote-status")]
+    [Authorize]
+    [ProducesResponseType(typeof(VoteStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetVoteStatus(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Mevcut kullanıcı ID'sini al
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Geçersiz token" });
+            }
+
+            var result = await _postService.GetVoteStatusAsync(id, userId, cancellationToken);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Vote status hatası - PostId: {PostId}", id);
+            return BadRequest(new { message = "Upvote durumu alınamadı" });
+        }
+    }
 }

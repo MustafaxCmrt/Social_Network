@@ -57,8 +57,19 @@ public class CategoriesConfiguration : IEntityTypeConfiguration<Categories>
 
         builder.HasIndex(c => c.IsDeleted)
             .HasDatabaseName("IX_Categories_IsDeleted");
+        
+        builder.HasIndex(c => c.ParentCategoryId)
+            .HasDatabaseName("IX_Categories_ParentCategoryId");
 
         // Relationships
+        
+        // Self-referencing relationship (Alt Kategoriler)
+        builder.HasOne(c => c.ParentCategory)
+            .WithMany(c => c.SubCategories)
+            .HasForeignKey(c => c.ParentCategoryId)
+            .OnDelete(DeleteBehavior.Restrict) // Üst kategori silindiğinde alt kategoriler korunsun
+            .IsRequired(false);
+        
         builder.HasMany(c => c.Threads)
             .WithOne(t => t.Category)
             .HasForeignKey(t => t.CategoryId)

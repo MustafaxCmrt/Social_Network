@@ -386,4 +386,157 @@ public class UserService : IUserService
 
         return true;
     }
+
+    /// <summary>
+    /// Kullanıcının oluşturduğu thread'leri getirir (sayfalama ile)
+    /// </summary>
+    public async Task<UserThreadHistoryDto> GetUserThreadsAsync(int userId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var user = await _unitOfWork.Users.FirstOrDefaultAsync(
+            u => u.Id == userId && !u.IsDeleted,
+            cancellationToken
+        );
+
+        if (user == null)
+        {
+            return new UserThreadHistoryDto
+            {
+                UserId = userId,
+                Username = string.Empty,
+                TotalThreads = 0,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalPages = 0,
+                Threads = new List<Application.DTOs.Thread.ThreadDto>()
+            };
+        }
+
+        // Toplam thread sayısını al
+        var totalThreads = await _unitOfWork.Threads.CountAsync(
+            t => t.UserId == userId && !t.IsDeleted,
+            cancellationToken
+        );
+
+        // Toplam sayfa sayısını hesapla
+        var totalPages = (int)Math.Ceiling(totalThreads / (double)pageSize);
+
+        // Thread'leri sayfalama ile getir
+        var allThreads = await _unitOfWork.Threads.GetAllAsync(cancellationToken);
+        var userThreads = allThreads
+            .Where(t => t.UserId == userId && !t.IsDeleted)
+            .OrderByDescending(t => t.CreatedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Select(t => new Application.DTOs.Thread.ThreadDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Content = t.Content,
+                ViewCount = t.ViewCount,
+                IsSolved = t.IsSolved,
+                UserId = t.UserId,
+                CategoryId = t.CategoryId,
+                CreatedAt = t.CreatedAt,
+                UpdatedAt = t.UpdatedAt
+            })
+            .ToList();
+
+        return new UserThreadHistoryDto
+        {
+            UserId = userId,
+            Username = user.Username,
+            TotalThreads = totalThreads,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            Threads = userThreads
+        };
+    }
+
+    /// <summary>
+    /// Kullanıcının yazdığı post'ları getirir (sayfalama ile)
+    /// </summary>
+    public async Task<UserPostHistoryDto> GetUserPostsAsync(int userId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var user = await _unitOfWork.Users.FirstOrDefaultAsync(
+            u => u.Id == userId && !u.IsDeleted,
+            cancellationToken
+        );
+
+        if (user == null)
+        {
+            return new UserPostHistoryDto
+            {
+                UserId = userId,
+                Username = string.Empty,
+                TotalPosts = 0,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalPages = 0,
+                Posts = new List<Application.DTOs.Post.PostDto>()
+            };
+        }
+
+        // Toplam post sayısını al
+        var totalPosts = await _unitOfWork.Posts.CountAsync(
+            p => p.UserId == userId && !p.IsDeleted,
+            cancellationToken
+        );
+
+        // Toplam sayfa sayısını hesapla
+        var totalPages = (int)Math.Ceiling(totalPosts / (double)pageSize);
+
+        // Post'ları sayfalama ile getir
+        var allPosts = await _unitOfWork.Posts.GetAllAsync(cancellationToken);
+        var userPosts = allPosts
+            .Where(p => p.UserId == userId && !p.IsDeleted)
+            .OrderByDescending(p => p.CreatedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .Select(p => new Application.DTOs.Post.PostDto
+            {
+                Id = p.Id,
+                ThreadId = p.ThreadId,
+                UserId = p.UserId,
+                Content = p.Content,
+                Img = p.Img,
+                IsSolution = p.IsSolution,
+                UpvoteCount = p.UpvoteCount,
+                ParentPostId = p.ParentPostId,
+                ReplyCount = p.Replies.Count,
+                CreatedAt = p.CreatedAt,
+                UpdatedAt = p.UpdatedAt
+            })
+            .ToList();
+
+        return new UserPostHistoryDto
+        {
+            UserId = userId,
+            Username = user.Username,
+            TotalPosts = totalPosts,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalPages = totalPages,
+            Posts = userPosts
+        };
+    }
+
+    /// <summary>
+    /// Kullanıcının profil resmini günceller
+    /// </summary>
+    public async Task<string?> UpdateProfileImageAsync(int userId, string imageUrl, CancellationToken cancellationToken = default)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+
+        if (user == null || user.IsDeleted)
+            return null;
+
+        user.ProfileImg = imageUrl;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        _unitOfWork.Users.Update(user);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return user.ProfileImg;
+    }
 }

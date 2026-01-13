@@ -81,4 +81,33 @@ public interface IUserService
     /// <param name="cancellationToken">İptal token'ı</param>
     /// <returns>Silme başarılıysa true</returns>
     Task<bool> DeleteMyAccountAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kullanıcının oluşturduğu thread'leri getirir (sayfalama ile)
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="pageNumber">Sayfa numarası</param>
+    /// <param name="pageSize">Sayfa başına öğe sayısı</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Thread listesi</returns>
+    Task<UserThreadHistoryDto> GetUserThreadsAsync(int userId, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kullanıcının yazdığı post'ları getirir (sayfalama ile)
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="pageNumber">Sayfa numarası</param>
+    /// <param name="pageSize">Sayfa başına öğe sayısı</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Post listesi</returns>
+    Task<UserPostHistoryDto> GetUserPostsAsync(int userId, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kullanıcının profil resmini günceller
+    /// </summary>
+    /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="imageUrl">Yeni profil resmi URL'i</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>Güncellenmiş profil URL'i</returns>
+    Task<string?> UpdateProfileImageAsync(int userId, string imageUrl, CancellationToken cancellationToken = default);
 }

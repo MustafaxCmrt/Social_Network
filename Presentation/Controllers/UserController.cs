@@ -409,4 +409,54 @@ public class UserController : AppController
             return BadRequest(new { message = "Resim yüklenirken bir hata oluştu" });
         }
     }
+
+    /// <summary>
+    /// Kullanıcının oluşturduğu thread'leri getirir (sayfalama ile)
+    /// </summary>
+    /// <param name="id">Kullanıcı ID'si</param>
+    /// <param name="pageNumber">Sayfa numarası (varsayılan: 1)</param>
+    /// <param name="pageSize">Sayfa başına öğe sayısı (varsayılan: 10)</param>
+    /// <returns>200 OK - Thread geçmişi</returns>
+    [HttpGet("{id}/threads")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(UserThreadHistoryDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUserThreads(
+        int id,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        // Sayfalama parametrelerini doğrula
+        if (pageNumber < 1) pageNumber = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 50) pageSize = 50; // Maksimum 50 öğe
+
+        var result = await _userService.GetUserThreadsAsync(id, pageNumber, pageSize, HttpContext.RequestAborted);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Kullanıcının yazdığı post'ları getirir (sayfalama ile)
+    /// </summary>
+    /// <param name="id">Kullanıcı ID'si</param>
+    /// <param name="pageNumber">Sayfa numarası (varsayılan: 1)</param>
+    /// <param name="pageSize">Sayfa başına öğe sayısı (varsayılan: 10)</param>
+    /// <returns>200 OK - Post geçmişi</returns>
+    [HttpGet("{id}/posts")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(UserPostHistoryDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUserPosts(
+        int id,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        // Sayfalama parametrelerini doğrula
+        if (pageNumber < 1) pageNumber = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 50) pageSize = 50; // Maksimum 50 öğe
+
+        var result = await _userService.GetUserPostsAsync(id, pageNumber, pageSize, HttpContext.RequestAborted);
+
+        return Ok(result);
+    }
 }

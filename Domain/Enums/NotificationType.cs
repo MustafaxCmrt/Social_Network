@@ -23,5 +23,10 @@ public enum NotificationType
     /// <summary>
     /// Thread çözüldü olarak işaretlendi
     /// </summary>
-    ThreadSolved = 4
+    ThreadSolved = 4,
+    
+    /// <summary>
+    /// Yorum beğenildi (upvote)
+    /// </summary>
+    PostUpvoted = 5
 }

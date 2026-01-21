@@ -241,6 +241,20 @@ public class PostService : IPostService
             _unitOfWork.Threads.Update(thread);
 
             await _unitOfWork.CommitTransactionAsync(cancellationToken);
+            
+            // ✨ BİLDİRİMLER GÖNDER
+            // 1. Yorum sahibine: Yorumun çözüm işaretlendi
+            if (post.UserId != currentUserId.Value)
+            {
+                await SendSolutionMarkedNotificationAsync(post, thread, currentUserId.Value, cancellationToken);
+            }
+            
+            // 2. Thread sahibine: Thread'in çözüldü
+            if (thread.UserId != currentUserId.Value && thread.UserId != post.UserId)
+            {
+                await SendThreadSolvedNotificationAsync(thread, currentUserId.Value, cancellationToken);
+            }
+            
             return true;
         }
         catch
@@ -290,6 +304,12 @@ public class PostService : IPostService
 
         // 5. Kaydet
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 6. ✨ BİLDİRİM GÖNDER (kullanıcı kendi yorumunu beğenmemişse)
+        if (post.UserId != userId)
+        {
+            await SendUpvoteNotificationAsync(post, userId, cancellationToken);
+        }
 
         return new UpvoteResponseDto
         {
@@ -480,5 +500,84 @@ public class PostService : IPostService
                 },
                 cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Upvote sonrası yorum sahibine bildirim gönderir
+    /// </summary>
+    private async Task SendUpvoteNotificationAsync(
+        Posts post,
+        int actorUserId,
+        CancellationToken cancellationToken)
+    {
+        // Actor kullanıcı bilgilerini al
+        var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId, cancellationToken);
+        var actorName = actor?.Username ?? "Birileri";
+
+        // Bildirim oluştur
+        await _notificationService.CreateNotificationAsync(
+            new CreateNotificationDto
+            {
+                UserId = post.UserId,
+                ActorUserId = actorUserId,
+                Type = NotificationType.PostUpvoted,
+                Message = $"{actorName} yorumunuzu beğendi",
+                ThreadId = post.ThreadId,
+                PostId = post.Id
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Yorum çözüm işaretlendiğinde yorum sahibine bildirim gönderir
+    /// </summary>
+    private async Task SendSolutionMarkedNotificationAsync(
+        Posts post,
+        Threads thread,
+        int actorUserId,
+        CancellationToken cancellationToken)
+    {
+        // Actor kullanıcı bilgilerini al
+        var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId, cancellationToken);
+        var actorName = actor?.Username ?? "Yönetici";
+
+        // Bildirim oluştur
+        await _notificationService.CreateNotificationAsync(
+            new CreateNotificationDto
+            {
+                UserId = post.UserId,
+                ActorUserId = actorUserId,
+                Type = NotificationType.SolutionMarked,
+                Message = $"{actorName} yorumunuzu '{thread.Title}' konusunda çözüm olarak işaretledi",
+                ThreadId = thread.Id,
+                PostId = post.Id
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Thread çözüldü işaretlendiğinde thread sahibine bildirim gönderir
+    /// </summary>
+    private async Task SendThreadSolvedNotificationAsync(
+        Threads thread,
+        int actorUserId,
+        CancellationToken cancellationToken)
+    {
+        // Actor kullanıcı bilgilerini al
+        var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId, cancellationToken);
+        var actorName = actor?.Username ?? "Yönetici";
+
+        // Bildirim oluştur
+        await _notificationService.CreateNotificationAsync(
+            new CreateNotificationDto
+            {
+                UserId = thread.UserId,
+                ActorUserId = actorUserId,
+                Type = NotificationType.ThreadSolved,
+                Message = $"{actorName} '{thread.Title}' konunuzu çözüldü olarak işaretledi",
+                ThreadId = thread.Id,
+                PostId = null
+            },
+            cancellationToken);
     }
 }

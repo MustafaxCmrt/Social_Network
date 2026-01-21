@@ -34,7 +34,7 @@ public class NotificationService : INotificationService
             include: query => query
                 .Include(n => n.ActorUser)      // Kim yaptı?
                 .Include(n => n.Thread)         // Hangi thread?
-                .Include(n => n.Post),          // Hangi post?
+                .Include(n => n.Post)!,         // Hangi post? (nullable suppress - Posts opsiyonel olabilir)
             cancellationToken);
 
         // 2. Kullanıcıya ait olanları filtrele

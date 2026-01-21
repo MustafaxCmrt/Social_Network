@@ -1,8 +1,10 @@
 using Application.DTOs.Post;
 using Application.DTOs.Common;
+using Application.DTOs.Notification;
 using Application.Common.Extensions;
 using Application.Services.Abstractions;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using Persistence.UnitOfWork;
 
@@ -12,11 +14,16 @@ public class PostService : IPostService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly INotificationService _notificationService;
 
-    public PostService(IUnitOfWork unitOfWork, ICurrentUserService currentUserService)
+    public PostService(
+        IUnitOfWork unitOfWork, 
+        ICurrentUserService currentUserService,
+        INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _notificationService = notificationService;
     }
 
     public async Task<PagedResultDto<PostDto>> GetAllPostsByThreadIdAsync(
@@ -103,6 +110,13 @@ public class PostService : IPostService
         }
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // ✨ BİLDİRİM GÖNDER
+        await SendNotificationAfterPostCreatedAsync(
+            post, 
+            thread, 
+            currentUserId.Value, 
+            cancellationToken);
 
         return MapToDto(post);
     }
@@ -406,5 +420,65 @@ public class PostService : IPostService
             CreatedAt = post.CreatedAt,
             UpdatedAt = post.UpdatedAt
         };
+    }
+
+    /// <summary>
+    /// Post oluşturulduktan sonra ilgili kullanıcılara bildirim gönderir
+    /// </summary>
+    private async Task SendNotificationAfterPostCreatedAsync(
+        Posts post,
+        Threads thread,
+        int actorUserId,
+        CancellationToken cancellationToken)
+    {
+        // Kullanıcı kendi yorumuna bildirim almasın
+        int? recipientUserId = null;
+        NotificationType notificationType = NotificationType.ThreadReply; // Default
+        string message = string.Empty; // Default
+
+        // SENARYO 1: Yoruma cevap (ParentPostId var)
+        if (post.ParentPostId.HasValue)
+        {
+            var parentPost = await _unitOfWork.Posts.GetByIdAsync(post.ParentPostId.Value, cancellationToken);
+            if (parentPost != null)
+            {
+                recipientUserId = parentPost.UserId;
+                notificationType = NotificationType.PostReply;
+                
+                // Actor kullanıcı bilgilerini al
+                var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId, cancellationToken);
+                var actorName = actor?.Username ?? "Birileri";
+                
+                message = $"{actorName} yorumunuza cevap verdi";
+            }
+        }
+        // SENARYO 2: Thread'e yorum (ana yorum)
+        else
+        {
+            recipientUserId = thread.UserId;
+            notificationType = NotificationType.ThreadReply;
+            
+            // Actor kullanıcı bilgilerini al
+            var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId, cancellationToken);
+            var actorName = actor?.Username ?? "Birileri";
+            
+            message = $"{actorName} thread'inize cevap verdi: {thread.Title}";
+        }
+
+        // Kullanıcı kendi yorumuna bildirim almasın
+        if (recipientUserId.HasValue && recipientUserId.Value != actorUserId)
+        {
+            await _notificationService.CreateNotificationAsync(
+                new CreateNotificationDto
+                {
+                    UserId = recipientUserId.Value,
+                    ActorUserId = actorUserId,
+                    Type = notificationType,
+                    Message = message,
+                    ThreadId = thread.Id,
+                    PostId = post.Id
+                },
+                cancellationToken);
+        }
     }
 }

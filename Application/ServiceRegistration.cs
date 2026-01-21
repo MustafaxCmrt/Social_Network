@@ -94,6 +94,7 @@ public static class ServiceRegistration
         services.AddScoped<IPostService, PostService>();
         services.AddScoped<IFileService, FileService>();
         services.AddScoped<ISearchService, SearchService>();
+        services.AddScoped<INotificationService, NotificationService>();
 
         return services;
     }

@@ -8,6 +8,7 @@ public class Threads : BaseEntity
     public string Content { get; set; } = null!; // Zorunlu - içerik olmalı
     public int ViewCount { get; set; } = 0; // Zorunlu - başlangıçta 0
     public bool IsSolved { get; set; } = false; // Zorunlu - başlangıçta çözülmemiş
+    public bool IsLocked { get; set; } = false; // Zorunlu - başlangıçta kilitli değil (admin thread'i kilitleyebilir)
     public int PostCount { get; set; } = 0; // Zorunlu - başlangıçta 0 yorum
     
     public int UserId { get; set; } // Foreign Key - Zorunlu

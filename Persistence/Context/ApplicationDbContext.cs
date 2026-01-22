@@ -23,6 +23,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<PostVotes> PostVotes { get; set; }
     public DbSet<Notifications> Notifications { get; set; }
     public DbSet<Reports> Reports { get; set; }
+    public DbSet<UserBans> UserBans { get; set; }
+    public DbSet<UserMutes> UserMutes { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -38,6 +40,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<PostVotes>().HasQueryFilter(pv => !pv.IsDeleted);
         modelBuilder.Entity<Notifications>().HasQueryFilter(n => !n.IsDeleted);
         modelBuilder.Entity<Reports>().HasQueryFilter(r => !r.IsDeleted);
+        modelBuilder.Entity<UserBans>().HasQueryFilter(ub => !ub.IsDeleted);
+        modelBuilder.Entity<UserMutes>().HasQueryFilter(um => !um.IsDeleted);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

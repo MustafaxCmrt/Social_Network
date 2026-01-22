@@ -30,6 +30,10 @@ public class ThreadsConfiguration : IEntityTypeConfiguration<Threads>
         builder.Property(t => t.IsSolved)
             .IsRequired()
             .HasDefaultValue(false);
+
+        builder.Property(t => t.IsLocked)
+            .IsRequired()
+            .HasDefaultValue(false);
         
         builder.Property(t => t.PostCount)
             .IsRequired()
@@ -74,6 +78,9 @@ public class ThreadsConfiguration : IEntityTypeConfiguration<Threads>
 
         builder.HasIndex(t => t.IsSolved)
             .HasDatabaseName("IX_Threads_IsSolved");
+
+        builder.HasIndex(t => t.IsLocked)
+            .HasDatabaseName("IX_Threads_IsLocked");
 
         builder.HasIndex(t => t.IsDeleted)
             .HasDatabaseName("IX_Threads_IsDeleted");

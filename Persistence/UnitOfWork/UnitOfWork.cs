@@ -34,6 +34,10 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<PostVotes> PostVotes => _postVotes ??= new Repository<PostVotes>(_context);
     public IRepository<Notifications> Notifications => _notifications ??= new Repository<Notifications>(_context);
 
+    public IRepository<Reports> Reports => throw new NotImplementedException();
+
+
+
     // SaveChanges
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

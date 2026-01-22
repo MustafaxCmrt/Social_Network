@@ -22,7 +22,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Categories> Categories { get; set; }
     public DbSet<PostVotes> PostVotes { get; set; }
     public DbSet<Notifications> Notifications { get; set; }
-
+    public DbSet<Reports> Reports { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -37,6 +37,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Categories>().HasQueryFilter(c => !c.IsDeleted);
         modelBuilder.Entity<PostVotes>().HasQueryFilter(pv => !pv.IsDeleted);
         modelBuilder.Entity<Notifications>().HasQueryFilter(n => !n.IsDeleted);
+        modelBuilder.Entity<Reports>().HasQueryFilter(r => !r.IsDeleted);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

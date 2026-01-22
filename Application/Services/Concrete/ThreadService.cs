@@ -12,11 +12,13 @@ public class ThreadService : IThreadService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IModerationService _moderationService;
 
-    public ThreadService(IUnitOfWork unitOfWork, ICurrentUserService currentUserService)
+    public ThreadService(IUnitOfWork unitOfWork, ICurrentUserService currentUserService, IModerationService moderationService)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _moderationService = moderationService;
     }
 
     public async Task<PagedResultDto<ThreadDto>> GetAllThreadsAsync(
@@ -104,6 +106,14 @@ public class ThreadService : IThreadService
         if (category == null)
         {
             throw new KeyNotFoundException($"Kategori ID: {createThreadDto.CategoryId} bulunamadı.");
+        }
+
+        // MODERASYON: Kullanıcı mute'lu mu kontrol et
+        var (isMuted, activeMute) = await _moderationService.IsUserMutedAsync(currentUserId.Value);
+        if (isMuted && activeMute != null)
+        {
+            throw new InvalidOperationException(
+                $"Susturulduğunuz için konu açamazsınız. Bitiş: {activeMute.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeMute.Reason}");
         }
 
         var thread = new Threads

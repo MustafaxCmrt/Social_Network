@@ -19,6 +19,9 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<Categories>? _categories;
     private IRepository<PostVotes>? _postVotes;
     private IRepository<Notifications>? _notifications;
+    private IRepository<Reports>? _reports;
+    private IRepository<UserBans>? _userBans;
+    private IRepository<UserMutes>? _userMutes;
 
     public UnitOfWork(ApplicationDbContext context, ICurrentUserService? currentUserService)
     {
@@ -33,8 +36,9 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<Categories> Categories => _categories ??= new Repository<Categories>(_context);
     public IRepository<PostVotes> PostVotes => _postVotes ??= new Repository<PostVotes>(_context);
     public IRepository<Notifications> Notifications => _notifications ??= new Repository<Notifications>(_context);
-
-    public IRepository<Reports> Reports => throw new NotImplementedException();
+    public IRepository<Reports> Reports => _reports ??= new Repository<Reports>(_context);
+    public IRepository<UserBans> UserBans => _userBans ??= new Repository<UserBans>(_context);
+    public IRepository<UserMutes> UserMutes => _userMutes ??= new Repository<UserMutes>(_context);
 
 
 

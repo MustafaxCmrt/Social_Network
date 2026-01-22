@@ -89,7 +89,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
         entity.IsDeleted = true;
         entity.DeletedDate = DateTime.UtcNow;
         entity.Recstatus = false;
-        _dbSet.Update(entity); // Remove DEĞİL, Update olmalı!
+        _dbSet.Update(entity); 
     }
 
     public void DeleteRange(IEnumerable<T> entities)
@@ -100,6 +100,6 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
             entity.DeletedDate = DateTime.UtcNow;
             entity.Recstatus = false;
         }
-        _dbSet.UpdateRange(entities); // Remove DEĞİL, Update olmalı!
+        _dbSet.UpdateRange(entities); 
     }
 }

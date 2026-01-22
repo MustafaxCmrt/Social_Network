@@ -15,15 +15,18 @@ public class PostService : IPostService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
     private readonly INotificationService _notificationService;
+    private readonly IModerationService _moderationService;
 
     public PostService(
         IUnitOfWork unitOfWork, 
         ICurrentUserService currentUserService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IModerationService moderationService)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _notificationService = notificationService;
+        _moderationService = moderationService;
     }
 
     public async Task<PagedResultDto<PostDto>> GetAllPostsByThreadIdAsync(
@@ -66,6 +69,20 @@ public class PostService : IPostService
         if (thread == null)
         {
             throw new KeyNotFoundException($"Konu ID: {createPostDto.ThreadId} bulunamadı.");
+        }
+
+        // MODERASYON: Kullanıcı mute'lu mu kontrol et
+        var (isMuted, activeMute) = await _moderationService.IsUserMutedAsync(currentUserId.Value);
+        if (isMuted && activeMute != null)
+        {
+            throw new InvalidOperationException(
+                $"Susturulduğunuz için yorum yapamazsınız. Bitiş: {activeMute.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeMute.Reason}");
+        }
+
+        // 🔒 MODERASYON: Thread kilitli mi kontrol et
+        if (thread.IsLocked)
+        {
+            throw new InvalidOperationException("Bu konu kilitlenmiştir, yeni yorum eklenemez.");
         }
 
         // ParentPostId varsa, ana yorumun varlığını kontrol et

@@ -13,6 +13,8 @@ public interface IUnitOfWork : IDisposable
     IRepository<PostVotes> PostVotes { get; }
     IRepository<Notifications> Notifications { get; }
     IRepository<Reports> Reports { get; }
+    IRepository<UserBans> UserBans { get; }
+    IRepository<UserMutes> UserMutes { get; }
     
     // Transaction yönetimi
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

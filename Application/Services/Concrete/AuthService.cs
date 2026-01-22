@@ -14,11 +14,13 @@ public class AuthService : IAuthService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IJwtService _jwtService;
+    private readonly IModerationService _moderationService;
 
-    public AuthService(IUnitOfWork unitOfWork, IJwtService jwtService)
+    public AuthService(IUnitOfWork unitOfWork, IJwtService jwtService, IModerationService moderationService)
     {
         _unitOfWork = unitOfWork;
         _jwtService = jwtService;
+        _moderationService = moderationService;
     }
 
     /// <summary>
@@ -112,17 +114,28 @@ public class AuthService : IAuthService
         if (!user.IsActive)
             return null;
 
-        // 4. Refresh token version'ı artır - hem access hem refresh token aynı versiyonu kullanacak
+        // 4. MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(user.Id);
+        if (isBanned && activeBan != null)
+        {
+            var banMessage = activeBan.IsPermanent 
+                ? "Hesabınız kalıcı olarak yasaklanmıştır." 
+                : $"Hesabınız {activeBan.ExpiresAt:dd.MM.yyyy HH:mm} tarihine kadar yasaklanmıştır.";
+            banMessage += $" Sebep: {activeBan.Reason}";
+            throw new UnauthorizedAccessException(banMessage);
+        }
+
+        // 5. Refresh token version'ı artır - hem access hem refresh token aynı versiyonu kullanacak
         user.RefreshTokenVersion++;
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // 5. JWT access token ve refresh token oluştur (aynı version ile)
+        // 6. JWT access token ve refresh token oluştur (aynı version ile)
         var accessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
         var refreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
         var expiresIn = _jwtService.GetTokenExpirationMinutes();
         var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
 
-        // 6. Response DTO oluştur ve döndür
+        // 7. Response DTO oluştur ve döndür
         return new LoginResponseDto
         {
             AccessToken = accessToken,

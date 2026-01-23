@@ -22,6 +22,7 @@ public class AuthController : AppController
     private readonly IValidator<RegisterRequestDto> _registerValidator;
     private readonly IValidator<ForgotPasswordRequestDto> _forgotPasswordValidator;
     private readonly IValidator<ResetPasswordRequestDto> _resetPasswordValidator;
+    private readonly IValidator<ResendVerificationEmailDto> _resendVerificationValidator;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -32,6 +33,7 @@ public class AuthController : AppController
         IValidator<RegisterRequestDto> registerValidator,
         IValidator<ForgotPasswordRequestDto> forgotPasswordValidator,
         IValidator<ResetPasswordRequestDto> resetPasswordValidator,
+        IValidator<ResendVerificationEmailDto> resendVerificationValidator,
         ILogger<AuthController> logger)
     {
         _authService = authService;
@@ -41,6 +43,7 @@ public class AuthController : AppController
         _registerValidator = registerValidator;
         _forgotPasswordValidator = forgotPasswordValidator;
         _resetPasswordValidator = resetPasswordValidator;
+        _resendVerificationValidator = resendVerificationValidator;
         _logger = logger;
     }
 
@@ -345,6 +348,48 @@ public class AuthController : AppController
         {
             _logger.LogError(ex, "Error in VerifyEmail");
             return StatusCode(500, new { message = "Email doğrulanırken bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Email doğrulama email'ini tekrar gönderir
+    /// Rate limiting: 2 dakikada 1 email
+    /// </summary>
+    /// <param name="request">Kullanıcının email adresi</param>
+    /// <returns>Başarı mesajı (güvenlik nedeniyle her zaman aynı mesaj)</returns>
+    [HttpPost("resend-verification-email")]
+    public async Task<IActionResult> ResendVerificationEmail([FromBody] ResendVerificationEmailDto request)
+    {
+        try
+        {
+            // 1. Validasyon
+            var validationResult = await _resendVerificationValidator.ValidateAsync(request);
+            if (!validationResult.IsValid)
+            {
+                var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToArray();
+                return BadRequest(new { errors });
+            }
+
+            // 2. Service çağrısı
+            await _authService.ResendVerificationEmailAsync(request.Email);
+
+            // 3. Her durumda aynı mesaj (email leak prevention)
+            _logger.LogInformation("Resend verification email requested for {Email}", request.Email);
+            return Ok(new
+            {
+                message = "Eğer bu email adresi kayıtlıysa ve doğrulanmamışsa, doğrulama email'i gönderildi."
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Rate limiting veya zaten doğrulanmış hatası
+            _logger.LogWarning(ex, "Resend verification failed for {Email}", request.Email);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in ResendVerificationEmail");
+            return StatusCode(500, new { message = "Email gönderilirken bir hata oluştu." });
         }
     }
 

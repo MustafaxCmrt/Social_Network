@@ -13,8 +13,12 @@ public class ResetPasswordRequestDtoValidator : AbstractValidator<ResetPasswordR
         
         RuleFor(x => x.NewPassword)
             .NotEmpty().WithMessage("Yeni şifre gereklidir.")
-            .MinimumLength(6).WithMessage("Şifre en az 6 karakter olmalıdır.")
-            .MaximumLength(50).WithMessage("Şifre en fazla 50 karakter olabilir.");
+            .MinimumLength(8).WithMessage("Şifre en az 8 karakter olmalıdır.")
+            .MaximumLength(100).WithMessage("Şifre en fazla 100 karakter olabilir.")
+            .Matches("[A-Z]").WithMessage("Şifre en az bir büyük harf içermelidir.")
+            .Matches("[a-z]").WithMessage("Şifre en az bir küçük harf içermelidir.")
+            .Matches("[0-9]").WithMessage("Şifre en az bir rakam içermelidir.")
+            .Matches("[^a-zA-Z0-9]").WithMessage("Şifre en az bir özel karakter içermelidir (!@#$%^&* vb.).");
         
         RuleFor(x => x.ConfirmPassword)
             .NotEmpty().WithMessage("Şifre tekrarı gereklidir.")

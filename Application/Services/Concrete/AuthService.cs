@@ -142,7 +142,14 @@ public class AuthService : IAuthService
         if (!user.IsActive)
             return null;
 
-        // 4. MODERASYON: Kullanıcı ban'lı mı kontrol et
+        // 4. Email doğrulandı mı kontrol et
+        if (!user.EmailVerified)
+        {
+            throw new UnauthorizedAccessException(
+                "Email adresiniz doğrulanmamış. Lütfen email kutunuzu kontrol edin ve doğrulama linkine tıklayın.");
+        }
+
+        // 5. MODERASYON: Kullanıcı ban'lı mı kontrol et
         var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(user.Id);
         if (isBanned && activeBan != null)
         {
@@ -153,17 +160,17 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException(banMessage);
         }
 
-        // 5. Refresh token version'ı artır - hem access hem refresh token aynı versiyonu kullanacak
+        // 6. Refresh token version'ı artır - hem access hem refresh token aynı versiyonu kullanacak
         user.RefreshTokenVersion++;
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // 6. JWT access token ve refresh token oluştur (aynı version ile)
+        // 7. JWT access token ve refresh token oluştur (aynı version ile)
         var accessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
         var refreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
         var expiresIn = _jwtService.GetTokenExpirationMinutes();
         var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
 
-        // 7. Response DTO oluştur ve döndür
+        // 8. Response DTO oluştur ve döndür
         return new LoginResponseDto
         {
             AccessToken = accessToken,
@@ -240,6 +247,59 @@ public class AuthService : IAuthService
         {
             Message = "Başarıyla çıkış yapıldı"
         };
+    }
+
+    /// <summary>
+    /// Email doğrulama email'ini tekrar gönderir
+    /// Rate limiting: 1 email / 2 dakika
+    /// </summary>
+    public async Task<bool> ResendVerificationEmailAsync(string email)
+    {
+        // 1. Kullanıcıyı bul
+        var user = await _unitOfWork.Users.FirstOrDefaultAsync(u => u.Email == email && !u.IsDeleted);
+
+        // Kullanıcı bulunamadı (güvenlik: her zaman true döner)
+        if (user == null)
+            return true; // Email leak prevention
+
+        // 2. Zaten doğrulanmış mı?
+        if (user.EmailVerified)
+        {
+            throw new InvalidOperationException("Email adresi zaten doğrulanmış.");
+        }
+
+        // 3. Rate limiting: Son 2 dakikada email gönderildi mi?
+        if (user.EmailVerificationTokenCreatedAt.HasValue &&
+            user.EmailVerificationTokenCreatedAt.Value > DateTime.UtcNow.AddMinutes(-2))
+        {
+            var waitTime = 2 - (DateTime.UtcNow - user.EmailVerificationTokenCreatedAt.Value).TotalMinutes;
+            throw new InvalidOperationException(
+                $"Çok fazla email gönderme talebi. Lütfen {Math.Ceiling(waitTime)} dakika bekleyin.");
+        }
+
+        // 4. Yeni token oluştur
+        var plainToken = Guid.NewGuid().ToString();
+        var hashedToken = HashToken(plainToken);
+
+        // 5. Token'ı güncelle
+        user.EmailVerificationToken = hashedToken;
+        user.EmailVerificationTokenCreatedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        _unitOfWork.Users.Update(user);
+        await _unitOfWork.SaveChangesAsync();
+
+        // 6. Email gönder
+        try
+        {
+            await _emailService.SendEmailVerificationAsync(user.Email, plainToken, user.FirstName);
+            return true;
+        }
+        catch (Exception)
+        {
+            // Email gönderme hatası
+            throw new InvalidOperationException("Email gönderilemedi. Lütfen daha sonra tekrar deneyin.");
+        }
     }
 
     /// <summary>

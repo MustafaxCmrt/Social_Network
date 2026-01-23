@@ -38,4 +38,11 @@ public interface IAuthService
     /// <param name="cancellationToken">İptal token'ı</param>
     /// <returns>Çıkış sonucu, kullanıcı bulunamazsa null</returns>
     Task<LogoutResponseDto?> LogoutAsync(int userId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Email doğrulama email'ini tekrar gönderir
+    /// </summary>
+    /// <param name="email">Kullanıcı email adresi</param>
+    /// <returns>Başarılı veya hata mesajı</returns>
+    Task<bool> ResendVerificationEmailAsync(string email);
 }

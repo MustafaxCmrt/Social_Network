@@ -52,12 +52,12 @@ public class RegisterRequestDtoValidator : AbstractValidator<RegisterRequestDto>
             .MaximumLength(100)
             .WithMessage("Email adresi en fazla 100 karakter olabilir");
 
-        // Password validasyonları
+        // Password validasyonları - Güçlü şifre gereksinimleri
         RuleFor(x => x.Password)
             .NotEmpty()
             .WithMessage("Şifre boş olamaz")
-            .MinimumLength(6)
-            .WithMessage("Şifre en az 6 karakter olmalıdır")
+            .MinimumLength(8)
+            .WithMessage("Şifre en az 8 karakter olmalıdır")
             .MaximumLength(100)
             .WithMessage("Şifre en fazla 100 karakter olabilir")
             .Matches("[A-Z]")
@@ -65,7 +65,9 @@ public class RegisterRequestDtoValidator : AbstractValidator<RegisterRequestDto>
             .Matches("[a-z]")
             .WithMessage("Şifre en az bir küçük harf içermelidir")
             .Matches("[0-9]")
-            .WithMessage("Şifre en az bir rakam içermelidir");
+            .WithMessage("Şifre en az bir rakam içermelidir")
+            .Matches("[^a-zA-Z0-9]")
+            .WithMessage("Şifre en az bir özel karakter içermelidir (!@#$%^&* vb.)");
 
         // ConfirmPassword validasyonları
         RuleFor(x => x.ConfirmPassword)

@@ -1,5 +1,6 @@
 using Application.DTOs.User;
 using Application.Services.Abstractions;
+using Domain.Services;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ public class UserController : AppController
 {
     private readonly IUserService _userService;
     private readonly IFileService _fileService;
+    private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<UserController> _logger;
     private readonly IValidator<CreateUserDto> _createValidator;
     private readonly IValidator<UpdateUserDto> _updateValidator;
@@ -24,6 +26,7 @@ public class UserController : AppController
     public UserController(
         IUserService userService,
         IFileService fileService,
+        ICurrentUserService currentUserService,
         ILogger<UserController> logger,
         IValidator<CreateUserDto> createValidator,
         IValidator<UpdateUserDto> updateValidator,
@@ -31,6 +34,7 @@ public class UserController : AppController
     {
         _userService = userService;
         _fileService = fileService;
+        _currentUserService = currentUserService;
         _logger = logger;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
@@ -399,9 +403,26 @@ public class UserController : AppController
             // 4. Dosyayı yükle
             var imageUrl = await _fileService.UploadImageAsync(file, "profiles", cancellationToken);
 
-            _logger.LogInformation("Profil resmi yüklendi: {ImageUrl}", imageUrl);
+            // 5. Kullanıcı ID'sini al
+            var userId = _currentUserService.GetCurrentUserId();
+            
+            if (userId == null)
+            {
+                return Unauthorized(new { message = "Kullanıcı oturumu bulunamadı" });
+            }
 
-            return Ok(new { imageUrl });
+            // 6. Profil resmini veritabanına kaydet
+            var updatedImageUrl = await _userService.UpdateProfileImageAsync(userId.Value, imageUrl, cancellationToken);
+
+            if (updatedImageUrl == null)
+            {
+                _logger.LogWarning("Profil resmi veritabanına kaydedilemedi - Kullanıcı ID: {UserId}", userId);
+                return BadRequest(new { message = "Profil resmi veritabanına kaydedilemedi" });
+            }
+
+            _logger.LogInformation("Profil resmi yüklendi ve veritabanına kaydedildi: {ImageUrl}, Kullanıcı ID: {UserId}", imageUrl, userId);
+
+            return Ok(new { imageUrl = updatedImageUrl });
         }
         catch (Exception ex)
         {

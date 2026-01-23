@@ -15,6 +15,7 @@ public interface IUnitOfWork : IDisposable
     IRepository<Reports> Reports { get; }
     IRepository<UserBans> UserBans { get; }
     IRepository<UserMutes> UserMutes { get; }
+    IRepository<PasswordResetTokens> PasswordResetTokens { get; }
     
     // Transaction yönetimi
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

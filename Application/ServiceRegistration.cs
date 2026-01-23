@@ -97,6 +97,8 @@ public static class ServiceRegistration
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IModerationService, ModerationService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IPasswordResetService, PasswordResetService>();
 
         return services;
     }

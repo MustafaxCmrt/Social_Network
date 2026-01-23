@@ -47,6 +47,16 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
             .IsRequired()
             .HasDefaultValue(true);
         
+        builder.Property(u => u.EmailVerified)
+            .IsRequired()
+            .HasDefaultValue(false); // Varsayılan: doğrulanmamış
+        
+        builder.Property(u => u.EmailVerificationToken)
+            .HasMaxLength(64); // SHA256 hash = 64 karakter hex
+        
+        builder.Property(u => u.EmailVerificationTokenCreatedAt)
+            .IsRequired(false); // Nullable
+        
         // Refresh Token Versioning - her login/logout/refresh'de artar
         builder.Property(u => u.RefreshTokenVersion)
             .IsRequired()
@@ -84,6 +94,9 @@ public class UsersConfiguration : IEntityTypeConfiguration<Users>
         builder.HasIndex(u => u.Email)
             .IsUnique()
             .HasDatabaseName("IX_Users_Email");
+        
+        builder.HasIndex(u => u.EmailVerificationToken)
+            .HasDatabaseName("IX_Users_EmailVerificationToken"); // Token ile hızlı arama
 
         builder.HasIndex(u => u.IsDeleted)
             .HasDatabaseName("IX_Users_IsDeleted");

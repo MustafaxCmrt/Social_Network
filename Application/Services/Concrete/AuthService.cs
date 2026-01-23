@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Application.DTOs.Auth;
 using Application.Services.Abstractions;
 using Domain.Entities;
@@ -15,12 +17,18 @@ public class AuthService : IAuthService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IJwtService _jwtService;
     private readonly IModerationService _moderationService;
+    private readonly IEmailService _emailService;
 
-    public AuthService(IUnitOfWork unitOfWork, IJwtService jwtService, IModerationService moderationService)
+    public AuthService(
+        IUnitOfWork unitOfWork, 
+        IJwtService jwtService, 
+        IModerationService moderationService,
+        IEmailService emailService)
     {
         _unitOfWork = unitOfWork;
         _jwtService = jwtService;
         _moderationService = moderationService;
+        _emailService = emailService;
     }
 
     /// <summary>
@@ -54,7 +62,10 @@ public class AuthService : IAuthService
         // 3. Şifreyi BCrypt ile hashle
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-        // 4. Yeni kullanıcı oluştur
+        var plainToken = Guid.NewGuid().ToString(); // Email'de gönderilecek
+        var hashedToken = HashToken(plainToken); // DB'de saklanacak
+
+        // 5. Yeni kullanıcı oluştur
         var newUser = new Users
         {
             FirstName = request.FirstName,
@@ -64,13 +75,30 @@ public class AuthService : IAuthService
             PasswordHash = passwordHash,
             Role = Roles.User, // Varsayılan rol: User
             IsActive = true,
+            EmailVerified = false, // Henüz doğrulanmadı
+            EmailVerificationToken = hashedToken,
+            EmailVerificationTokenCreatedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
-        // 5. Veritabanına kaydet
+        // 6. Veritabanına kaydet
         await _unitOfWork.Users.CreateAsync(newUser, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 7. Email doğrulama email'i gönder
+        try
+        {
+            await _emailService.SendEmailVerificationAsync(
+                newUser.Email, 
+                plainToken, // Düz token email'de
+                newUser.FirstName);
+        }
+        catch (Exception)
+        {
+            // Email gönderme hatası olsa bile kayıt devam eder
+            // Kullanıcı daha sonra yeniden email gönderebilir
+        }
 
         // 6. Response DTO oluştur ve döndür
         return new RegisterResponseDto
@@ -212,5 +240,16 @@ public class AuthService : IAuthService
         {
             Message = "Başarıyla çıkış yapıldı"
         };
+    }
+
+    /// <summary>
+    /// Token'ı SHA256 ile hash'ler (Email verification için)
+    /// </summary>
+    private static string HashToken(string token)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash); // 64 karakter hex string
     }
 }

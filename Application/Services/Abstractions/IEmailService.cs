@@ -22,4 +22,12 @@ public interface IEmailService
     /// <param name="resetToken">Reset token (düz metin GUID)</param>
     /// <param name="userName">Kullanıcı adı</param>
     Task SendPasswordResetEmailAsync(string to, string resetToken, string userName);
+    
+    /// <summary>
+    /// Email doğrulama email'i gönderir (kayıt sonrası)
+    /// </summary>
+    /// <param name="to">Kullanıcı email'i</param>
+    /// <param name="verificationToken">Verification token (düz metin GUID)</param>
+    /// <param name="userName">Kullanıcı adı</param>
+    Task SendEmailVerificationAsync(string to, string verificationToken, string userName);
 }

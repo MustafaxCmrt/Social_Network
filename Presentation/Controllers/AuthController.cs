@@ -1,30 +1,47 @@
 using Application.DTOs.Auth;
+using Application.DTOs.PasswordReset;
 using Application.Services.Abstractions;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Persistence.UnitOfWork;
 using Presentation.Controllers.Abstraction;
 
 namespace Presentation.Controllers;
 
 /// <summary>
 /// Authentication (Kimlik doğrulama) işlemleri için API controller
-/// Login, Register gibi işlemleri yönetir
+/// Login, Register, Password Reset gibi işlemleri yönetir
 /// </summary>
 public class AuthController : AppController
 {
     private readonly IAuthService _authService;
+    private readonly IPasswordResetService _passwordResetService;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IValidator<LoginRequestDto> _loginValidator;
     private readonly IValidator<RegisterRequestDto> _registerValidator;
+    private readonly IValidator<ForgotPasswordRequestDto> _forgotPasswordValidator;
+    private readonly IValidator<ResetPasswordRequestDto> _resetPasswordValidator;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService,
+        IPasswordResetService passwordResetService,
+        IUnitOfWork unitOfWork,
         IValidator<LoginRequestDto> loginValidator,
-        IValidator<RegisterRequestDto> registerValidator)
+        IValidator<RegisterRequestDto> registerValidator,
+        IValidator<ForgotPasswordRequestDto> forgotPasswordValidator,
+        IValidator<ResetPasswordRequestDto> resetPasswordValidator,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
+        _passwordResetService = passwordResetService;
+        _unitOfWork = unitOfWork;
         _loginValidator = loginValidator;
         _registerValidator = registerValidator;
+        _forgotPasswordValidator = forgotPasswordValidator;
+        _resetPasswordValidator = resetPasswordValidator;
+        _logger = logger;
     }
 
     /// <summary>
@@ -187,5 +204,158 @@ public class AuthController : AppController
             return Unauthorized(new { message = "Kullanıcı bulunamadı" });
 
         return Ok(result);
+    }
+    /// <summary>
+    /// Şifre sıfırlama talebi oluşturur ve email gönderir
+    /// </summary>
+    /// <param name="dto">Kullanıcı email adresi</param>
+    /// <returns>Başarılı mesajı (her zaman true döner - güvenlik)</returns>
+    [HttpPost("forgot-password")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto dto)
+    {
+        // Validation
+        var validationResult = await _forgotPasswordValidator.ValidateAsync(dto);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(validationResult.Errors);
+        }
+
+        // IP adresini al (güvenlik logu için)
+        var requestIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        try
+        {
+            await _passwordResetService.ForgotPasswordAsync(dto, requestIp);
+
+            // Her zaman aynı mesaj (email leak prevention)
+            _logger.LogInformation("Password reset requested for email: {Email}", dto.Email);
+            return Ok(new 
+            { 
+                message = "Eğer bu email adresi sistemde kayıtlıysa, şifre sıfırlama linki gönderilmiştir. Lütfen email kutunuzu kontrol edin." 
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Rate limiting hatası
+            _logger.LogWarning(ex, "Rate limit exceeded for forgot password");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // Email gönderme hatası
+            _logger.LogError(ex, "Error in ForgotPassword for email: {Email}", dto.Email);
+            return StatusCode(500, new { message = "Şifre sıfırlama talebi işlenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin." });
+        }
+    }
+
+    /// <summary>
+    /// Token ile şifreyi sıfırlar
+    /// </summary>
+    /// <param name="dto">Token ve yeni şifre bilgileri</param>
+    /// <returns>Başarılı veya hata mesajı</returns>
+    [HttpPost("reset-password")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto dto)
+    {
+        // Validation
+        var validationResult = await _resetPasswordValidator.ValidateAsync(dto);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(validationResult.Errors);
+        }
+
+        try
+        {
+            var result = await _passwordResetService.ResetPasswordAsync(dto);
+
+            if (result)
+            {
+                _logger.LogInformation("Password reset successful");
+                return Ok(new { message = "Şifreniz başarıyla sıfırlandı. Artık yeni şifrenizle giriş yapabilirsiniz." });
+            }
+
+            return BadRequest(new { message = "Şifre sıfırlama başarısız oldu." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Token hatası (geçersiz, kullanılmış, süresi dolmuş)
+            _logger.LogWarning(ex, "Invalid token in ResetPassword");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            // Kullanıcı bulunamadı
+            _logger.LogWarning(ex, "User not found in ResetPassword");
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // Beklenmeyen hata
+            _logger.LogError(ex, "Error in ResetPassword");
+            return StatusCode(500, new { message = "Şifre sıfırlanırken bir hata oluştu. Lütfen daha sonra tekrar deneyin." });
+        }
+    }
+    /// <summary>
+    /// Email doğrulama (kayıt sonrası)
+    /// </summary>
+    /// <param name="token">Email'den gelen verification token</param>
+    /// <returns>Başarılı veya hata mesajı</returns>
+    [HttpGet("verify-email")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return BadRequest(new { message = "Token gereklidir." });
+        }
+
+        try
+        {
+            // Token'ı hash'le (DB'de hash olarak saklıyoruz)
+            var hashedToken = HashToken(token);
+
+            // Kullanıcıyı token ile bul
+            var user = await _unitOfWork.Users.FirstOrDefaultAsync(
+                u => u.EmailVerificationToken == hashedToken && !u.EmailVerified);
+
+            if (user == null)
+            {
+                _logger.LogWarning("Invalid or already verified token");
+                return BadRequest(new { message = "Geçersiz veya zaten doğrulanmış token." });
+            }
+
+            // Email'i doğrula
+            user.EmailVerified = true;
+            user.EmailVerificationToken = null; // Token'ı temizle
+            user.EmailVerificationTokenCreatedAt = null;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Email verified successfully for user {UserId}", user.Id);
+            return Ok(new { message = "Email adresiniz başarıyla doğrulandı! Artık giriş yapabilirsiniz." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in VerifyEmail");
+            return StatusCode(500, new { message = "Email doğrulanırken bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Token'ı SHA256 ile hash'ler
+    /// </summary>
+    private static string HashToken(string token)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(token);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash);
     }
 }

@@ -14,6 +14,22 @@ public class Users : BaseEntity
     public Roles Role { get; set; } // Zorunlu - enum default değer alır (0)
     public bool IsActive { get; set; } = true; // Zorunlu - yeni kullanıcı aktif olarak başlar
     
+    /// <summary>
+    /// Email doğrulandı mı? (Kayıt sonrası email doğrulama)
+    /// </summary>
+    public bool EmailVerified { get; set; } = false; // Varsayılan: doğrulanmamış
+    
+    /// <summary>
+    /// Email doğrulama token'ı (SHA256 hash)
+    /// Doğrulandıktan sonra null olur
+    /// </summary>
+    public string? EmailVerificationToken { get; set; }
+    
+    /// <summary>
+    /// Email doğrulama token'ının oluşturulma zamanı
+    /// </summary>
+    public DateTime? EmailVerificationTokenCreatedAt { get; set; }
+    
     // Refresh Token versiyonlama - her login/logout/refresh'de artar
     // Token içinde bu versiyon claim olarak taşınır, veritabanı ile eşleşmezse token geçersiz olur
     public int RefreshTokenVersion { get; set; } = 0;

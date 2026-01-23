@@ -103,4 +103,47 @@ public class EmailService : IEmailService
 
         await SendEmailAsync(to, subject, body, isHtml: true);
     }
+
+    public async Task SendEmailVerificationAsync(string to, string verificationToken, string userName)
+    {
+        var verificationLink = $"{_configuration["AppSettings:FrontendUrl"]}/verify-email?token={verificationToken}";
+        
+        var subject = "Email Adresinizi Doğrulayın";
+        var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #2196F3; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 20px; background-color: #f9f9f9; }}
+        .button {{ display: inline-block; padding: 12px 24px; margin: 20px 0; background-color: #2196F3; color: white; text-decoration: none; border-radius: 4px; }}
+        .footer {{ margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>Hoş Geldiniz!</h1>
+        </div>
+        <div class='content'>
+            <p>Merhaba {userName},</p>
+            <p>Social Network'e hoş geldiniz! Hesabınızı aktifleştirmek için email adresinizi doğrulamanız gerekmektedir.</p>
+            <p>Email adresinizi doğrulamak için aşağıdaki butona tıklayın:</p>
+            <a href='{verificationLink}' class='button'>Email'imi Doğrula</a>
+            <p>Veya bu linki tarayıcınıza yapıştırın:</p>
+            <p style='word-break: break-all; color: #666;'>{verificationLink}</p>
+            <p><strong>✅ Doğrulama sonrası tüm özellikleri kullanabilirsiniz.</strong></p>
+            <p>Eğer bu hesabı siz oluşturmadıysanız, bu email'i görmezden gelebilirsiniz.</p>
+        </div>
+        <div class='footer'>
+            <p>© {DateTime.UtcNow.Year} Social Network. Tüm hakları saklıdır.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        await SendEmailAsync(to, subject, body, isHtml: true);
+    }
 }

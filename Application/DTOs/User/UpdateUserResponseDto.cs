@@ -31,6 +31,11 @@ public class UpdateUserResponseDto
     public string Email { get; set; } = null!;
 
     /// <summary>
+    /// Profil resmi URL
+    /// </summary>
+    public string? ProfileImg { get; set; }
+
+    /// <summary>
     /// Kullanıcının rolü
     /// </summary>
     public string Role { get; set; } = null!;

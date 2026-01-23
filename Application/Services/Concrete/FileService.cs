@@ -8,6 +8,7 @@ namespace Application.Services.Concrete;
 public class FileService : IFileService
 {
     private readonly IWebHostEnvironment _environment;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<FileService> _logger;
     
     // İzin verilen uzantılar
@@ -16,9 +17,10 @@ public class FileService : IFileService
     // Maksimum dosya boyutu (5 MB)
     private const long MaxFileSize = 5 * 1024 * 1024;
 
-    public FileService(IWebHostEnvironment environment, ILogger<FileService> logger)
+    public FileService(IWebHostEnvironment environment, IHttpContextAccessor httpContextAccessor, ILogger<FileService> logger)
     {
         _environment = environment;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -66,8 +68,13 @@ public class FileService : IFileService
                 await file.CopyToAsync(stream, cancellationToken);
             }
 
-            // 8. URL döndür
-            var fileUrl = $"/uploads/{folder}/{uniqueFileName}";
+            // 8. Tam URL döndür (frontend'in backend URL'ini bilmesine gerek kalmasın)
+            var request = _httpContextAccessor.HttpContext?.Request;
+            var baseUrl = request != null 
+                ? $"{request.Scheme}://{request.Host}" 
+                : "http://localhost:5000"; // Fallback for background tasks
+            
+            var fileUrl = $"{baseUrl}/uploads/{folder}/{uniqueFileName}";
             
             _logger.LogInformation("Dosya yüklendi: {FileUrl}", fileUrl);
             

@@ -4,7 +4,9 @@ using Application.DTOs.Auth;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Persistence.UnitOfWork;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Services.Concrete;
 
@@ -18,17 +20,19 @@ public class AuthService : IAuthService
     private readonly IJwtService _jwtService;
     private readonly IModerationService _moderationService;
     private readonly IEmailService _emailService;
-
+    private readonly ILogger<AuthService> _logger;
     public AuthService(
         IUnitOfWork unitOfWork, 
         IJwtService jwtService, 
         IModerationService moderationService,
-        IEmailService emailService)
+        IEmailService emailService,
+        ILogger<AuthService> logger)
     {
         _unitOfWork = unitOfWork;
         _jwtService = jwtService;
         _moderationService = moderationService;
         _emailService = emailService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -83,8 +87,17 @@ public class AuthService : IAuthService
         };
 
         // 6. Veritabanına kaydet
-        await _unitOfWork.Users.CreateAsync(newUser, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _unitOfWork.Users.CreateAsync(newUser, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("Duplicate entry") == true)
+        {
+            // Unique constraint ihlali - username veya email zaten kullanılıyor
+            _logger.LogWarning("Duplicate entry hatası: {Message}", ex.InnerException.Message);
+            return null;
+        }
 
         // 7. Email doğrulama email'i gönder
         try

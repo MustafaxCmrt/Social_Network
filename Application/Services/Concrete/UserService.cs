@@ -78,6 +78,7 @@ public class UserService : IUserService
             LastName = newUser.LastName,
             Username = newUser.Username,
             Email = newUser.Email,
+            ProfileImg = newUser.ProfileImg,
             Role = newUser.Role.ToString(),
             IsActive = newUser.IsActive,
             CreatedAt = newUser.CreatedAt
@@ -104,6 +105,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             Username = user.Username,
             Email = user.Email,
+            ProfileImg = user.ProfileImg,
             Role = user.Role.ToString(),
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt,
@@ -125,6 +127,7 @@ public class UserService : IUserService
         {
             UserId = u.Id,
             Username = u.Username,
+            ProfileImg = u.ProfileImg,
             Email = u.Email,
             Role = u.Role.ToString(),
             IsActive = u.IsActive
@@ -207,6 +210,7 @@ public class UserService : IUserService
             LastName = user.LastName,
             Username = user.Username,
             Email = user.Email,
+            ProfileImg = user.ProfileImg,
             Role = user.Role.ToString(),
             IsActive = user.IsActive,
             UpdatedAt = user.UpdatedAt

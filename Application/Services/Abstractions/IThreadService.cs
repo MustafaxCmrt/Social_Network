@@ -19,4 +19,5 @@ public interface IThreadService
     Task<ThreadDto> CreateThreadAsync(CreateThreadDto createThreadDto, CancellationToken cancellationToken = default);
     Task<ThreadDto> UpdateThreadAsync(UpdateThreadDto updateThreadDto, CancellationToken cancellationToken = default);
     Task<bool> DeleteThreadAsync(int id, CancellationToken cancellationToken = default);
+    Task<bool> IncrementViewCountAsync(int id, CancellationToken cancellationToken = default);
 }

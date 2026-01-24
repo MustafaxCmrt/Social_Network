@@ -22,6 +22,10 @@ try
     // Add services to the container
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
+    
+    // Memory Cache (Thread view count tracking için)
+    builder.Services.AddMemoryCache();
+    
     builder.Services.AddSwaggerGen(c =>
     {
         c.SwaggerDoc("v1", new OpenApiInfo { Title = "Social Network API", Version = "v1" });

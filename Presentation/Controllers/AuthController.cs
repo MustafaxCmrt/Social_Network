@@ -319,8 +319,11 @@ public class AuthController : AppController
 
         try
         {
+            _logger.LogInformation("Email verification attempt with token: {Token}", token);
+            
             // Token'ı hash'le (DB'de hash olarak saklıyoruz)
             var hashedToken = HashToken(token);
+            _logger.LogInformation("Hashed token: {HashedToken}", hashedToken);
 
             // Kullanıcıyı token ile bul
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(
@@ -328,7 +331,16 @@ public class AuthController : AppController
 
             if (user == null)
             {
-                _logger.LogWarning("Invalid or already verified token");
+                _logger.LogWarning("Invalid or already verified token. Hashed token: {HashedToken}", hashedToken);
+                
+                // Debug: Tüm doğrulanmamış kullanıcıları kontrol et
+                var unverifiedUsers = await _unitOfWork.Users.FindAsync(u => !u.EmailVerified);
+                _logger.LogInformation("Unverified users count: {Count}", unverifiedUsers.Count());
+                foreach (var u in unverifiedUsers)
+                {
+                    _logger.LogInformation("User {UserId} - Token in DB: {DbToken}", u.Id, u.EmailVerificationToken);
+                }
+                
                 return BadRequest(new { message = "Geçersiz veya zaten doğrulanmış token." });
             }
 

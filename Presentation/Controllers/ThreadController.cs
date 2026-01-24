@@ -65,6 +65,34 @@ public class ThreadController : AppController
         return Ok(thread);
     }
 
+    /// <summary>
+    /// Thread görüntülenme sayısını artırır (benzersiz görüntülenme tracking)
+    /// </summary>
+    /// <param name="id">Thread ID</param>
+    /// <param name="cancellationToken">İptal token'ı</param>
+    /// <returns>
+    /// 200 OK - Görüntülenme sayısı artırıldı
+    /// 204 No Content - Aynı kullanıcı 30 dk içinde zaten görüntülemiş
+    /// 404 Not Found - Thread bulunamadı
+    /// </returns>
+    [HttpPost("{id}/view")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> IncrementViewCount(int id, CancellationToken cancellationToken)
+    {
+        var result = await _threadService.IncrementViewCountAsync(id, cancellationToken);
+        
+        if (!result)
+        {
+            // Thread yok veya aynı kullanıcı 30 dk içinde zaten görüntülemiş
+            return NoContent();
+        }
+        
+        return Ok(new { message = "Görüntülenme sayısı artırıldı." });
+    }
+
     [HttpPost("create")]
     [Authorize]
     public async Task<IActionResult> CreateThread([FromBody] CreateThreadDto createThreadDto, CancellationToken cancellationToken)

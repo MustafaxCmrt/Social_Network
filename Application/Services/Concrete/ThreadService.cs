@@ -8,6 +8,7 @@ using Domain.Entities;
 using Domain.Services;
 using Persistence.UnitOfWork;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Application.Services.Concrete;
 
@@ -16,12 +17,18 @@ public class ThreadService : IThreadService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
     private readonly IModerationService _moderationService;
+    private readonly IMemoryCache _cache;
 
-    public ThreadService(IUnitOfWork unitOfWork, ICurrentUserService currentUserService, IModerationService moderationService)
+    public ThreadService(
+        IUnitOfWork unitOfWork, 
+        ICurrentUserService currentUserService, 
+        IModerationService moderationService,
+        IMemoryCache cache)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _moderationService = moderationService;
+        _cache = cache;
     }
 
     public async Task<PagedResultDto<ThreadDto>> GetAllThreadsAsync(
@@ -103,10 +110,7 @@ public class ThreadService : IThreadService
             return null;
         }
 
-        // ViewCount: detay sayfası görüntülenince artır
-        thread.ViewCount++;
-        _unitOfWork.Threads.Update(thread);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        // ViewCount artırma işlemi kaldırıldı - artık ayrı endpoint kullanılacak (POST /api/Thread/{id}/view)
 
         return MapToDto(thread);
     }
@@ -254,5 +258,38 @@ public class ThreadService : IThreadService
                 Slug = thread.Category.Slug
             }
         };
+    }
+
+    public async Task<bool> IncrementViewCountAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var currentUserId = _currentUserService.GetCurrentUserId();
+        
+        // Login olmuş kullanıcılar için cache ile duplicate view önleme (30 dakika TTL)
+        if (currentUserId.HasValue)
+        {
+            var viewKey = $"thread_view_{id}_user_{currentUserId.Value}";
+            
+            // Cache'de varsa (30 dk içinde görüntülemiş) artırma
+            if (_cache.TryGetValue(viewKey, out _))
+            {
+                return false; // Zaten görüntülemiş
+            }
+            
+            // Cache'e ekle
+            _cache.Set(viewKey, true, TimeSpan.FromMinutes(30));
+        }
+        // Anonymous kullanıcılar her seferinde sayacak (istenirse IP tracking eklenebilir)
+        
+        var thread = await _unitOfWork.Threads.GetByIdAsync(id, cancellationToken);
+        if (thread == null)
+        {
+            return false;
+        }
+        
+        thread.ViewCount++;
+        _unitOfWork.Threads.Update(thread);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        
+        return true;
     }
 }

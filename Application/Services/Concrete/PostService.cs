@@ -1,12 +1,14 @@
 using Application.DTOs.Post;
 using Application.DTOs.Common;
 using Application.DTOs.Notification;
+using Application.DTOs.User;
 using Application.Common.Extensions;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Services;
 using Persistence.UnitOfWork;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services.Concrete;
 
@@ -35,17 +37,20 @@ public class PostService : IPostService
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        // Sadece ana yorumları getir (ParentPostId = null)
-        var posts = await _unitOfWork.Posts.FindAsync(
-            p => p.ThreadId == threadId && p.ParentPostId == null, 
+        // Include ile User bilgilerini yükle
+        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
+            include: query => query.Include(p => p.User),
             cancellationToken);
+        
+        // Sadece ana yorumları getir (ParentPostId = null)
+        var posts = allPosts.Where(p => p.ThreadId == threadId && p.ParentPostId == null);
 
         // Sırala ve sayfalandır
         var ordered = posts
-            .OrderByDescending(p => p.IsSolution)
-            .ThenByDescending(p => p.UpvoteCount) // En çok beğenileni üste
-            .ThenByDescending(p => p.CreatedAt)
-            .ThenBy(p => p.Id);
+            .OrderByDescending(p => p.IsSolution)  // Çözüm işaretli önce
+            .ThenByDescending(p => p.CreatedAt)    // En yeni tarih
+            .ThenByDescending(p => p.UpvoteCount)  // Beğeni sayısı
+            .ThenBy(p => p.Id);                    // ID
 
         // Extension metod ile sayfalandır
         return ordered.ToPagedResult(page, pageSize, MapToDto);
@@ -53,7 +58,12 @@ public class PostService : IPostService
 
     public async Task<PostDto?> GetPostByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var post = await _unitOfWork.Posts.GetByIdAsync(id, cancellationToken);
+        // Include ile User bilgilerini yükle
+        var posts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
+            include: query => query.Include(p => p.User),
+            cancellationToken);
+        
+        var post = posts.FirstOrDefault(p => p.Id == id);
         return post == null ? null : MapToDto(post);
     }
 
@@ -420,10 +430,12 @@ public class PostService : IPostService
             throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
         }
 
-        // 2. Bu yorumun cevaplarını getir
-        var replies = await _unitOfWork.Posts.FindAsync(
-            p => p.ParentPostId == postId, 
+        // 2. Include ile User bilgilerini yükle ve cevapları getir
+        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
+            include: query => query.Include(p => p.User),
             cancellationToken);
+        
+        var replies = allPosts.Where(p => p.ParentPostId == postId);
 
         // 3. En çok beğenilene göre sırala ve sayfalandır
         var ordered = replies
@@ -455,7 +467,15 @@ public class PostService : IPostService
             ParentPostId = post.ParentPostId,
             ReplyCount = replyCount,
             CreatedAt = post.CreatedAt,
-            UpdatedAt = post.UpdatedAt
+            UpdatedAt = post.UpdatedAt,
+            User = post.User == null ? null : new UserSummaryDto
+            {
+                Id = post.User.Id,
+                FirstName = post.User.FirstName,
+                LastName = post.User.LastName,
+                Username = post.User.Username,
+                ProfileImg = post.User.ProfileImg
+            }
         };
     }
 

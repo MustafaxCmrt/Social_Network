@@ -1,10 +1,13 @@
 using Application.DTOs.Thread;
+using Application.DTOs.User;
+using Application.DTOs.Category;
 using Application.Services.Abstractions;
 using Application.DTOs.Common;
 using Application.Common.Extensions;
 using Domain.Entities;
 using Domain.Services;
 using Persistence.UnitOfWork;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Services.Concrete;
 
@@ -36,7 +39,13 @@ public class ThreadService : IThreadService
         if (pageSize < 1) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
 
-        var threads = await _unitOfWork.Threads.GetAllAsync(cancellationToken);
+        // Include ile User ve Category bilgilerini yükle
+        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
+            include: query => query
+                .Include(t => t.User)
+                .Include(t => t.Category),
+            cancellationToken);
+        
         IEnumerable<Threads> query = threads;
 
         if (!string.IsNullOrWhiteSpace(q))
@@ -62,7 +71,7 @@ public class ThreadService : IThreadService
         }
 
         // Sıralama
-        var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? "viewCount" : sortBy.Trim();
+        var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? "createdat" : sortBy.Trim();
         var normalizedSortDir = string.IsNullOrWhiteSpace(sortDir) ? "desc" : sortDir.Trim();
         var isAsc = string.Equals(normalizedSortDir, "asc", StringComparison.OrdinalIgnoreCase);
 
@@ -71,7 +80,8 @@ public class ThreadService : IThreadService
             "createdat" => isAsc ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt),
             "updatedat" => isAsc ? query.OrderBy(t => t.UpdatedAt) : query.OrderByDescending(t => t.UpdatedAt),
             "title" => isAsc ? query.OrderBy(t => t.Title) : query.OrderByDescending(t => t.Title),
-            _ => isAsc ? query.OrderBy(t => t.ViewCount) : query.OrderByDescending(t => t.ViewCount)
+            "viewcount" => isAsc ? query.OrderBy(t => t.ViewCount) : query.OrderByDescending(t => t.ViewCount),
+            _ => isAsc ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt)
         };
 
         // Extension metod ile sayfalandır
@@ -80,7 +90,14 @@ public class ThreadService : IThreadService
 
     public async Task<ThreadDto?> GetThreadByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var thread = await _unitOfWork.Threads.GetByIdAsync(id, cancellationToken);
+        // Include ile User ve Category bilgilerini yükle
+        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
+            include: query => query
+                .Include(t => t.User)
+                .Include(t => t.Category),
+            cancellationToken);
+        
+        var thread = threads.FirstOrDefault(t => t.Id == id);
         if (thread == null)
         {
             return null;
@@ -221,7 +238,21 @@ public class ThreadService : IThreadService
             UserId = thread.UserId,
             CategoryId = thread.CategoryId,
             CreatedAt = thread.CreatedAt,
-            UpdatedAt = thread.UpdatedAt
+            UpdatedAt = thread.UpdatedAt,
+            User = thread.User == null ? null : new UserSummaryDto
+            {
+                Id = thread.User.Id,
+                FirstName = thread.User.FirstName,
+                LastName = thread.User.LastName,
+                Username = thread.User.Username,
+                ProfileImg = thread.User.ProfileImg
+            },
+            Category = thread.Category == null ? null : new CategorySummaryDto
+            {
+                Id = thread.Category.Id,
+                Title = thread.Category.Title,
+                Slug = thread.Category.Slug
+            }
         };
     }
 }

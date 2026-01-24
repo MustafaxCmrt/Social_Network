@@ -1,3 +1,5 @@
+using Application.DTOs.User;
+
 namespace Application.DTOs.Post;
 
 public class PostDto
@@ -13,4 +15,7 @@ public class PostDto
     public int ReplyCount { get; set; } // Bu yoruma kaç cevap gelmiş
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    
+    // İlişkili veri
+    public UserSummaryDto? User { get; set; }
 }

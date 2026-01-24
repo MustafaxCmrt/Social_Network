@@ -24,7 +24,9 @@ public class CategoryService : ICategoryService
                 .Include(c => c.SubCategories),
             cancellationToken);
         
-        return categories.Select(c => new CategoryDto
+        return categories
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => new CategoryDto
         {
             Id = c.Id,
             Title = c.Title,

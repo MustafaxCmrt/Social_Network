@@ -51,6 +51,14 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
         return await _dbSet.FirstOrDefaultAsync(predicate, cancellationToken);
     }
 
+    /// <summary>
+    /// Soft delete yapılmış kayıtlar dahil arama yapar (IgnoreQueryFilters)
+    /// </summary>
+    public async Task<T?> FirstOrDefaultIncludingDeletedAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.IgnoreQueryFilters().FirstOrDefaultAsync(predicate, cancellationToken);
+    }
+
     public async Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
     {
         return await _dbSet.AnyAsync(predicate, cancellationToken);

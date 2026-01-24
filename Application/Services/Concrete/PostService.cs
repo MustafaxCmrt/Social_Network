@@ -290,108 +290,154 @@ public class PostService : IPostService
             throw;
         }
     }
-
-    public async Task<UpvoteResponseDto> UpvotePostAsync(int postId, int userId, CancellationToken cancellationToken = default)
+    public async Task<bool> UnmarkSolutionAsync(int threadId, CancellationToken cancellationToken = default)
     {
-        // 1. Post var mı kontrol et
-        var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
-        if (post == null)
+        var currentUserId = _currentUserService.GetCurrentUserId();
+        if (currentUserId == null)
         {
-            throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
+            throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
-        // 2. Daha önce upvote vermişmi kontrol et
-        var existingVote = (await _unitOfWork.PostVotes.FindAsync(
-            pv => pv.PostId == postId && pv.UserId == userId,
-            cancellationToken)).FirstOrDefault();
+        var currentRole = _currentUserService.GetCurrentUserRole();
+        var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
 
-        if (existingVote != null)
+        var thread = await _unitOfWork.Threads.GetByIdAsync(threadId, cancellationToken);
+        if (thread == null)
         {
-            // Zaten beğenmiş
-            return new UpvoteResponseDto
+            throw new KeyNotFoundException($"Konu ID: {threadId} bulunamadı.");
+        }
+
+        if (!isAdmin && thread.UserId != currentUserId.Value)
+        {
+            throw new UnauthorizedAccessException("Bu konu için çözüm işaretini kaldırma yetkiniz yok.");
+        }
+
+        // Mevcut çözümü bul
+        var existingSolutions = (await _unitOfWork.Posts.FindAsync(
+            p => p.ThreadId == threadId && p.IsSolution,
+            cancellationToken)).ToList();
+
+        if (existingSolutions.Count == 0)
+        {
+            return false; // Zaten çözüm yok
+        }
+
+        // Transaction başlat
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            // Çözüm işaretini kaldır
+            foreach (var solution in existingSolutions)
             {
-                PostId = postId,
-                IsUpvoted = true,
-                TotalUpvotes = post.UpvoteCount,
-                Message = "Bu yorumu zaten beğendiniz"
-            };
+                solution.IsSolution = false;
+            }
+            _unitOfWork.Posts.UpdateRange(existingSolutions);
+
+            // Konuyu çözülmedi olarak işaretle
+            thread.IsSolved = false;
+            _unitOfWork.Threads.Update(thread);
+
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+            return true;
         }
-
-        // 3. Yeni upvote ekle
-        var vote = new PostVotes
+        catch
         {
-            PostId = postId,
-            UserId = userId
-        };
-        await _unitOfWork.PostVotes.CreateAsync(vote, cancellationToken);
-
-        // 4. Post'un upvote count'unu artır
-        post.UpvoteCount++;
-        _unitOfWork.Posts.Update(post);
-
-        // 5. Kaydet
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // 6. ✨ BİLDİRİM GÖNDER (kullanıcı kendi yorumunu beğenmemişse)
-        if (post.UserId != userId)
-        {
-            await SendUpvoteNotificationAsync(post, userId, cancellationToken);
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
         }
-
-        return new UpvoteResponseDto
-        {
-            PostId = postId,
-            IsUpvoted = true,
-            TotalUpvotes = post.UpvoteCount,
-            Message = "Yorum beğenildi"
-        };
     }
-
-    public async Task<UpvoteResponseDto> RemoveUpvoteAsync(int postId, int userId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Post beğeni toggle işlemi (varsa kaldir, yoksa ekle)
+    /// </summary>
+    public async Task<UpvoteResponseDto> ToggleUpvoteAsync(int postId, int userId, CancellationToken cancellationToken = default)
     {
-        // 1. Post var mı kontrol et
+        // 1. Post var mi kontrol et
         var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
         if (post == null)
         {
-            throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
+            throw new KeyNotFoundException($"Post ID {postId} bulunamadi");
         }
 
-        // 2. Upvote var mı kontrol et
-        var existingVote = (await _unitOfWork.PostVotes.FindAsync(
+        // 2. Mevcut upvote'u kontrol et (Silinen kayitlar DAHIL - IgnoreQueryFilters)
+        var existingVote = await _unitOfWork.PostVotes.FirstOrDefaultIncludingDeletedAsync(
             pv => pv.PostId == postId && pv.UserId == userId,
-            cancellationToken)).FirstOrDefault();
+            cancellationToken);
 
-        if (existingVote == null)
+        bool isUpvoted;
+        string message;
+
+        if (existingVote != null && !existingVote.IsDeleted)
         {
-            // Zaten beğenmemiş
-            return new UpvoteResponseDto
+            // Aktif begeni varsa kaldir (Toggle OFF - Soft Delete)
+            _unitOfWork.PostVotes.Delete(existingVote);
+            
+            if (post.UpvoteCount > 0)
+            {
+                post.UpvoteCount--;
+                _unitOfWork.Posts.Update(post);
+            }
+            
+            // Kaydet ve change tracker'i temizle
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            
+            isUpvoted = false;
+            message = "Begeni kaldirildi";
+        }
+        else if (existingVote != null && existingVote.IsDeleted)
+        {
+            // Silinmis begeni varsa reaktive et (Toggle ON - Restore)
+            existingVote.IsDeleted = false;
+            existingVote.DeletedDate = null;
+            existingVote.DeletedUserId = null;
+            existingVote.Recstatus = true;
+            _unitOfWork.PostVotes.Update(existingVote);
+            
+            post.UpvoteCount++;
+            _unitOfWork.Posts.Update(post);
+            
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            
+            isUpvoted = true;
+            message = "Yorum begenildi";
+            
+            // BILDIRIM GONDER
+            if (post.UserId != userId)
+            {
+                await SendUpvoteNotificationAsync(post, userId, cancellationToken);
+            }
+        }
+        else
+        {
+            // Hic begeni yoksa yeni ekle (Toggle ON - Create)
+            var vote = new PostVotes
             {
                 PostId = postId,
-                IsUpvoted = false,
-                TotalUpvotes = post.UpvoteCount,
-                Message = "Bu yorumu zaten beğenmemiştiniz"
+                UserId = userId
             };
-        }
-
-        // 3. Upvote'u sil
-        _unitOfWork.PostVotes.Delete(existingVote);
-
-        // 4. Post'un upvote count'unu azalt
-        if (post.UpvoteCount > 0)
-        {
-            post.UpvoteCount--;
+            await _unitOfWork.PostVotes.CreateAsync(vote, cancellationToken);
+            
+            post.UpvoteCount++;
             _unitOfWork.Posts.Update(post);
+            
+            // Kaydet
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            
+            isUpvoted = true;
+            message = "Yorum begenildi";
+            
+            // BILDIRIM GONDER
+            if (post.UserId != userId)
+            {
+                await SendUpvoteNotificationAsync(post, userId, cancellationToken);
+            }
         }
-
-        // 5. Kaydet
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new UpvoteResponseDto
         {
             PostId = postId,
-            IsUpvoted = false,
+            IsUpvoted = isUpvoted,
             TotalUpvotes = post.UpvoteCount,
-            Message = "Beğeni geri alındı"
+            Message = message
         };
     }
 
@@ -445,6 +491,39 @@ public class PostService : IPostService
 
         // Extension metod ile sayfalandır
         return ordered.ToPagedResult(page, pageSize, MapToDto);
+    }
+
+    /// <summary>
+    /// Post resmini gunceller
+    /// </summary>
+    public async Task<string?> UpdatePostImageAsync(int postId, string imageUrl, CancellationToken cancellationToken = default)
+    {
+        var currentUserId = _currentUserService.GetCurrentUserId();
+        if (currentUserId == null)
+        {
+            throw new UnauthorizedAccessException("Oturum bilgisi bulunamadi.");
+        }
+
+        var currentRole = _currentUserService.GetCurrentUserRole();
+        var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
+
+        var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
+        if (post == null)
+        {
+            return null;
+        }
+
+        // Sadece post sahibi veya admin resmi guncelleyebilir
+        if (!isAdmin && post.UserId != currentUserId.Value)
+        {
+            throw new UnauthorizedAccessException("Bu yorumun resmini guncelleme yetkiniz yok.");
+        }
+
+        post.Img = imageUrl;
+        _unitOfWork.Posts.Update(post);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return imageUrl;
     }
 
     private PostDto MapToDto(Posts post)

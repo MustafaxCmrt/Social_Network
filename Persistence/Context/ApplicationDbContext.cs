@@ -26,6 +26,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<UserBans> UserBans { get; set; }
     public DbSet<UserMutes> UserMutes { get; set; }
     public DbSet<PasswordResetTokens> PasswordResetTokens { get; set; }
+    public DbSet<AuditLogs> AuditLogs { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +46,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<UserBans>().HasQueryFilter(ub => !ub.IsDeleted);
         modelBuilder.Entity<UserMutes>().HasQueryFilter(um => !um.IsDeleted);
         modelBuilder.Entity<PasswordResetTokens>().HasQueryFilter(prt => !prt.IsDeleted);
+        modelBuilder.Entity<AuditLogs>().HasQueryFilter(al => !al.IsDeleted);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

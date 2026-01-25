@@ -23,6 +23,7 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<UserBans>? _userBans;
     private IRepository<UserMutes>? _userMutes;
     private IRepository<PasswordResetTokens>? _passwordResetTokens;
+    private IRepository<AuditLogs>? _auditLogs;
 
     public UnitOfWork(ApplicationDbContext context, ICurrentUserService? currentUserService)
     {
@@ -41,6 +42,7 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<UserBans> UserBans => _userBans ??= new Repository<UserBans>(_context);
     public IRepository<UserMutes> UserMutes => _userMutes ??= new Repository<UserMutes>(_context);
     public IRepository<PasswordResetTokens> PasswordResetTokens => _passwordResetTokens ??= new Repository<PasswordResetTokens>(_context);
+    public IRepository<AuditLogs> AuditLogs => _auditLogs ??= new Repository<AuditLogs>(_context);
 
 
 

@@ -34,6 +34,11 @@ public class Users : BaseEntity
     // Token içinde bu versiyon claim olarak taşınır, veritabanı ile eşleşmezse token geçersiz olur
     public int RefreshTokenVersion { get; set; } = 0;
     
+    /// <summary>
+    /// Son giriş zamanı - Login olduğunda güncellenir
+    /// </summary>
+    public DateTime? LastLoginAt { get; set; }
+    
     // Bir kullanıcının birden fazla konusu olabilir:
     public ICollection<Threads> Threads { get; set; } = new List<Threads>();
     

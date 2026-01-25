@@ -175,15 +175,19 @@ public class AuthService : IAuthService
 
         // 6. Refresh token version'ı artır - hem access hem refresh token aynı versiyonu kullanacak
         user.RefreshTokenVersion++;
+        
+        // 7. Son giriş zamanını güncelle
+        user.LastLoginAt = DateTime.UtcNow;
+        
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // 7. JWT access token ve refresh token oluştur (aynı version ile)
+        // 8. JWT access token ve refresh token oluştur (aynı version ile)
         var accessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
         var refreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
         var expiresIn = _jwtService.GetTokenExpirationMinutes();
         var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
 
-        // 8. Response DTO oluştur ve döndür
+        // 9. Response DTO oluştur ve döndür
         return new LoginResponseDto
         {
             AccessToken = accessToken,
@@ -218,8 +222,9 @@ public class AuthService : IAuthService
         if (user.RefreshTokenVersion != version)
             return null;
         
-        // 4. Yeni version oluştur
+        // 4. Yeni version oluştur ve son giriş zamanını güncelle
         user.RefreshTokenVersion++;
+        user.LastLoginAt = DateTime.UtcNow; // Refresh token kullanımı da aktif kullanım sayılır
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         
         // 5. Yeni access token ve refresh token oluştur (yeni version ile)

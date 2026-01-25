@@ -238,6 +238,7 @@ public class ThreadService : IThreadService
             Title = thread.Title,
             Content = thread.Content,
             ViewCount = thread.ViewCount,
+            PostCount = thread.PostCount,
             IsSolved = thread.IsSolved,
             UserId = thread.UserId,
             CategoryId = thread.CategoryId,

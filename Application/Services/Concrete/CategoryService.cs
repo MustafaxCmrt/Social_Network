@@ -1,3 +1,4 @@
+using Application.DTOs.AuditLog;
 using Application.DTOs.Category;
 using Application.Services.Abstractions;
 using Domain.Entities;
@@ -10,10 +11,12 @@ namespace Application.Services.Concrete;
 public class CategoryService : ICategoryService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditLogService _auditLogService;
 
-    public CategoryService(IUnitOfWork unitOfWork)
+    public CategoryService(IUnitOfWork unitOfWork, IAuditLogService auditLogService)
     {
         _unitOfWork = unitOfWork;
+        _auditLogService = auditLogService;
     }
 
     public async Task<IEnumerable<CategoryDto>> GetAllCategoriesAsync(CancellationToken cancellationToken = default)
@@ -136,6 +139,16 @@ public class CategoryService : ICategoryService
 
             await _unitOfWork.Categories.CreateAsync(category, cancellationToken);
             await _unitOfWork.CommitTransactionAsync(cancellationToken);
+
+            // Audit log kaydet
+            await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+            {
+                Action = "CreateCategory",
+                EntityType = "Category",
+                EntityId = category.Id,
+                NewValue = $"Title: {category.Title}, Slug: {category.Slug}",
+                Success = true
+            }, cancellationToken);
 
             return new CategoryDto
             {
@@ -269,6 +282,17 @@ public class CategoryService : ICategoryService
 
         _unitOfWork.Categories.Delete(category);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            Action = "DeleteCategory",
+            EntityType = "Category",
+            EntityId = id,
+            OldValue = $"Title: {category.Title}, Slug: {category.Slug}",
+            NewValue = "Deleted",
+            Success = true
+        }, cancellationToken);
 
         return true;
     }

@@ -45,20 +45,17 @@ public class AuthService : IAuthService
     /// </summary>
     public async Task<RegisterResponseDto?> RegisterAsync(RegisterRequestDto request, CancellationToken cancellationToken = default)
     {
-        // 1. Username zaten kullanılıyor mu kontrol et
-        var usernameExists = await _unitOfWork.Users.AnyAsync(
-            u => u.Username == request.Username && !u.IsDeleted,
-            cancellationToken
-        );
+        // 1. Username zaten kullanılıyor mu kontrol et (CASE-SENSITIVE - GÜVENLİK)
+        var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
+        var usernameExists = allUsers.Any(u => 
+            u.Username.Equals(request.Username, StringComparison.Ordinal) && !u.IsDeleted);
 
         if (usernameExists)
             return null; // Username zaten kullanılıyor
 
-        // 2. Email zaten kullanılıyor mu kontrol et
-        var emailExists = await _unitOfWork.Users.AnyAsync(
-            u => u.Email == request.Email && !u.IsDeleted,
-            cancellationToken
-        );
+        // 2. Email zaten kullanılıyor mu kontrol et (case-insensitive - RFC standardı)
+        var emailExists = allUsers.Any(u => 
+            u.Email.Equals(request.Email, StringComparison.OrdinalIgnoreCase) && !u.IsDeleted);
 
         if (emailExists)
             return null; // Email zaten kullanılıyor
@@ -135,25 +132,32 @@ public class AuthService : IAuthService
     /// </summary>
     public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
     {
-        // 1. Kullanıcıyı bul (Email veya Username ile)
-        var user = await _unitOfWork.Users.FirstOrDefaultAsync(
-            u => (u.Email == request.UsernameOrEmail || u.Username == request.UsernameOrEmail)
-                 && !u.IsDeleted, // Silinmiş kullanıcıları dahil etme
-            cancellationToken
-        );
-
-        // Kullanıcı bulunamadı
-        if (user == null)
-            return null;
+        // 1. Kullanıcıyı bul (Email veya Username ile) - USERNAME CASE-SENSITIVE!
+        var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
+        var user = allUsers.FirstOrDefault(u => !u.IsDeleted && (
+            u.Email.Equals(request.UsernameOrEmail, StringComparison.OrdinalIgnoreCase) || // Email case-insensitive
+            u.Username.Equals(request.UsernameOrEmail, StringComparison.Ordinal) // Username CASE-SENSITIVE
+        ));
 
         // 2. Şifre kontrolü (BCrypt ile hash karşılaştırması)
-        bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
-        if (!isPasswordValid)
-            return null;
+        // GÜVENLIK: Kullanıcı bulunamasa bile BCrypt.Verify çalıştırarak timing attack'ı önle
+        var dummyHash = "$2a$11$dummyHashForTimingAttackPrevention1234567890123456789";
+        var passwordHash = user?.PasswordHash ?? dummyHash;
+        bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, passwordHash);
+
+        // Kullanıcı bulunamadı veya şifre yanlış
+        if (user == null || !isPasswordValid)
+        {
+            _logger.LogWarning("Failed login attempt for: {UsernameOrEmail}", request.UsernameOrEmail);
+            return null; // Güvenlik: "kullanıcı yok" mu "şifre yanlış" mı belli etme
+        }
 
         // 3. Kullanıcı aktif mi kontrol et
         if (!user.IsActive)
+        {
+            _logger.LogWarning("Inactive user login attempt: {UserId}", user.Id);
             return null;
+        }
 
         // 4. Email doğrulandı mı kontrol et
         if (!user.EmailVerified)
@@ -194,7 +198,13 @@ public class AuthService : IAuthService
             RefreshToken = refreshToken,
             ExpiresIn = expiresIn,
             TokenType = "Bearer",
-            RefreshTokenExpiresInDays = refreshTokenExpiresInDays
+            RefreshTokenExpiresInDays = refreshTokenExpiresInDays,
+            // Kullanıcı bilgileri (Frontend için)
+            UserId = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            Role = user.Role.ToString(),
+            IsAdmin = user.Role == Roles.Admin
         };
     }
     
@@ -240,7 +250,13 @@ public class AuthService : IAuthService
             ExpiresIn = expiresIn,
             TokenType = "Bearer",
             RefreshToken = newRefreshToken,
-            RefreshTokenExpiresInDays = refreshTokenExpiresInDays
+            RefreshTokenExpiresInDays = refreshTokenExpiresInDays,
+            // Kullanıcı bilgileri (Frontend için)
+            UserId = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            Role = user.Role.ToString(),
+            IsAdmin = user.Role == Roles.Admin
         };
     }
     

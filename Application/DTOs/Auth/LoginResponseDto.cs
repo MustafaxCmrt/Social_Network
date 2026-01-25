@@ -33,4 +33,31 @@ public record LoginResponseDto
     /// Refresh token'ın geçerlilik süresi (gün cinsinden)
     /// </summary>
     public int RefreshTokenExpiresInDays { get; set; }
+        
+    /// <summary>
+    /// Kullanıcı ID
+    /// </summary>
+    public int UserId { get; set; }
+    
+    /// <summary>
+    /// Kullanıcı adı
+    /// </summary>
+    public string Username { get; set; } = null!;
+    
+    /// <summary>
+    /// Email adresi
+    /// </summary>
+    public string Email { get; set; } = null!;
+    
+    /// <summary>
+    /// Kullanıcı rolü: "User" veya "Admin"
+    /// Frontend: if (user.role === "Admin") { ... }
+    /// </summary>
+    public string Role { get; set; } = null!;
+    
+    /// <summary>
+    /// Admin mi? (Kolaylık için)
+    /// Frontend: if (user.isAdmin) { ... }
+    /// </summary>
+    public bool IsAdmin { get; set; }
 }

@@ -1,3 +1,4 @@
+using Application.DTOs.AuditLog;
 using Application.DTOs.Thread;
 using Application.DTOs.User;
 using Application.DTOs.Category;
@@ -18,17 +19,20 @@ public class ThreadService : IThreadService
     private readonly ICurrentUserService _currentUserService;
     private readonly IModerationService _moderationService;
     private readonly IMemoryCache _cache;
+    private readonly IAuditLogService _auditLogService;
 
     public ThreadService(
         IUnitOfWork unitOfWork, 
         ICurrentUserService currentUserService, 
         IModerationService moderationService,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        IAuditLogService auditLogService)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _moderationService = moderationService;
         _cache = cache;
+        _auditLogService = auditLogService;
     }
 
     public async Task<PagedResultDto<ThreadDto>> GetAllThreadsAsync(
@@ -123,13 +127,21 @@ public class ThreadService : IThreadService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
+        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
+        }
+
         var category = await _unitOfWork.Categories.GetByIdAsync(createThreadDto.CategoryId, cancellationToken);
         if (category == null)
         {
             throw new KeyNotFoundException($"Kategori ID: {createThreadDto.CategoryId} bulunamadı.");
         }
 
-        // MODERASYON: Kullanıcı mute'lu mu kontrol et
+        // 🔇 MODERASYON: Kullanıcı mute'lu mu kontrol et
         var (isMuted, activeMute) = await _moderationService.IsUserMutedAsync(currentUserId.Value);
         if (isMuted && activeMute != null)
         {
@@ -159,6 +171,14 @@ public class ThreadService : IThreadService
         if (currentUserId == null)
         {
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
+        }
+
+        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
         }
 
         var currentRole = _currentUserService.GetCurrentUserRole();
@@ -204,6 +224,14 @@ public class ThreadService : IThreadService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
+        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
+        }
+
         var currentRole = _currentUserService.GetCurrentUserRole();
         var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
 
@@ -226,6 +254,26 @@ public class ThreadService : IThreadService
 
         _unitOfWork.Threads.Delete(thread);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Admin tarafından silinmişse audit log kaydet
+        if (isAdmin && thread.UserId != currentUserId.Value)
+        {
+            var adminUser = await _unitOfWork.Users.GetByIdAsync(currentUserId.Value, cancellationToken);
+            if (adminUser != null)
+            {
+                await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+                {
+                    UserId = currentUserId.Value,
+                    Username = adminUser.Username,
+                    Action = "DeleteThread",
+                    EntityType = "Thread",
+                    EntityId = id,
+                    OldValue = $"Title: {thread.Title}",
+                    NewValue = "Deleted by Admin",
+                    Success = true
+                }, cancellationToken);
+            }
+        }
 
         return true;
     }

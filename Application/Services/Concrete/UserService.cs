@@ -1,4 +1,5 @@
 using Application.DTOs.User;
+using Application.DTOs.AuditLog;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Enums;
@@ -12,10 +13,12 @@ namespace Application.Services.Concrete;
 public class UserService : IUserService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditLogService _auditLogService;
 
-    public UserService(IUnitOfWork unitOfWork)
+    public UserService(IUnitOfWork unitOfWork, IAuditLogService auditLogService)
     {
         _unitOfWork = unitOfWork;
+        _auditLogService = auditLogService;
     }
 
     /// <summary>
@@ -235,6 +238,17 @@ public class UserService : IUserService
 
         _unitOfWork.Users.Update(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            Action = "DeleteUser",
+            EntityType = "User",
+            EntityId = userId,
+            OldValue = $"Username: {user.Username}, Email: {user.Email}, Role: {user.Role}",
+            NewValue = "Deleted (soft delete)",
+            Success = true
+        }, cancellationToken);
 
         return true;
     }

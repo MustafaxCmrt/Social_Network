@@ -1,3 +1,4 @@
+using Application.DTOs.AuditLog;
 using Application.DTOs.Common;
 using Application.DTOs.Report;
 using Application.Services.Abstractions;
@@ -13,11 +14,13 @@ public class ReportService : IReportService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ReportService> _logger;
+    private readonly IAuditLogService _auditLogService;
 
-    public ReportService(IUnitOfWork unitOfWork, ILogger<ReportService> logger)
+    public ReportService(IUnitOfWork unitOfWork, ILogger<ReportService> logger, IAuditLogService auditLogService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _auditLogService = auditLogService;
     }
 
     public async Task<ReportsDto> CreateReportAsync(CreateReportDto dto, int reporterUserId)
@@ -236,6 +239,9 @@ public class ReportService : IReportService
             throw new InvalidOperationException($"Report with ID {reportId} not found.");
         }
 
+        // Eski status'u kaydet
+        var oldStatus = report.Status;
+
         // Status güncelle
         report.Status = dto.Status;
         report.ReviewedByUserId = adminUserId;
@@ -245,6 +251,19 @@ public class ReportService : IReportService
 
         _unitOfWork.Reports.Update(report);
         await _unitOfWork.SaveChangesAsync();
+
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "UpdateReportStatus",
+            EntityType = "Report",
+            EntityId = reportId,
+            OldValue = $"Status: {oldStatus}",
+            NewValue = $"Status: {dto.Status}, AdminNote: {dto.AdminNote}",
+            Success = true
+        });
 
         _logger.LogInformation("Report {ReportId} status updated successfully to {Status}", reportId, dto.Status);
 

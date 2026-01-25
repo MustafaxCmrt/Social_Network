@@ -30,4 +30,28 @@ public record RefreshTokenResponseDto
     /// Refresh token'ın geçerlilik süresi (gün cinsinden)
     /// </summary>
     public int RefreshTokenExpiresInDays { get; set; }
+    /// <summary>
+    /// Kullanıcı ID
+    /// </summary>
+    public int UserId { get; set; }
+    
+    /// <summary>
+    /// Kullanıcı adı
+    /// </summary>
+    public string Username { get; set; } = null!;
+    
+    /// <summary>
+    /// Email adresi
+    /// </summary>
+    public string Email { get; set; } = null!;
+    
+    /// <summary>
+    /// Kullanıcı rolü: "User" veya "Admin"
+    /// </summary>
+    public string Role { get; set; } = null!;
+    
+    /// <summary>
+    /// Admin mi?
+    /// </summary>
+    public bool IsAdmin { get; set; }
 }

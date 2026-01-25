@@ -1,3 +1,4 @@
+using Application.DTOs.AuditLog;
 using Application.DTOs.Post;
 using Application.DTOs.Common;
 using Application.DTOs.Notification;
@@ -18,16 +19,20 @@ public class PostService : IPostService
     private readonly ICurrentUserService _currentUserService;
     private readonly INotificationService _notificationService;
     private readonly IModerationService _moderationService;
+    private readonly IAuditLogService _auditLogService;
 
     public PostService(
         IUnitOfWork unitOfWork, 
         ICurrentUserService currentUserService,
         INotificationService notificationService,
-        IModerationService moderationService)
+        IModerationService moderationService,
+        IAuditLogService auditLogService)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _notificationService = notificationService;
+        _moderationService = moderationService;
+        _auditLogService = auditLogService;
         _moderationService = moderationService;
     }
 
@@ -75,13 +80,21 @@ public class PostService : IPostService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
+        // MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
+        }
+
         var thread = await _unitOfWork.Threads.GetByIdAsync(createPostDto.ThreadId, cancellationToken);
         if (thread == null)
         {
             throw new KeyNotFoundException($"Konu ID: {createPostDto.ThreadId} bulunamadı.");
         }
 
-        // MODERASYON: Kullanıcı mute'lu mu kontrol et
+        // 🔇 MODERASYON: Kullanıcı mute'lu mu kontrol et
         var (isMuted, activeMute) = await _moderationService.IsUserMutedAsync(currentUserId.Value);
         if (isMuted && activeMute != null)
         {
@@ -156,6 +169,14 @@ public class PostService : IPostService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
+        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
+        }
+
         var currentRole = _currentUserService.GetCurrentUserRole();
         var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
 
@@ -187,6 +208,14 @@ public class PostService : IPostService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
+        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
+        }
+
         var currentRole = _currentUserService.GetCurrentUserRole();
         var isAdmin = string.Equals(currentRole, "Admin", StringComparison.OrdinalIgnoreCase);
 
@@ -203,6 +232,26 @@ public class PostService : IPostService
 
         _unitOfWork.Posts.Delete(post);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Admin tarafından silinmişse audit log kaydet
+        if (isAdmin && post.UserId != currentUserId.Value)
+        {
+            var adminUser = await _unitOfWork.Users.GetByIdAsync(currentUserId.Value, cancellationToken);
+            if (adminUser != null)
+            {
+                await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+                {
+                    UserId = currentUserId.Value,
+                    Username = adminUser.Username,
+                    Action = "DeletePost",
+                    EntityType = "Post",
+                    EntityId = id,
+                    OldValue = $"Content: {post.Content}",
+                    NewValue = "Deleted by Admin",
+                    Success = true
+                }, cancellationToken);
+            }
+        }
 
         return true;
     }
@@ -351,6 +400,14 @@ public class PostService : IPostService
     /// </summary>
     public async Task<UpvoteResponseDto> ToggleUpvoteAsync(int postId, int userId, CancellationToken cancellationToken = default)
     {
+        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(userId);
+        if (isBanned && activeBan != null)
+        {
+            throw new UnauthorizedAccessException(
+                $"Yasaklandığınız için hiçbir işlem yapamazsınız. Bitiş: {activeBan.ExpiresAt:dd.MM.yyyy HH:mm}. Sebep: {activeBan.Reason}");
+        }
+
         // 1. Post var mi kontrol et
         var post = await _unitOfWork.Posts.GetByIdAsync(postId, cancellationToken);
         if (post == null)

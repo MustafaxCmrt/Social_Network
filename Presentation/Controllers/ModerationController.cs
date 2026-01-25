@@ -50,7 +50,7 @@ public class ModerationController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var adminUserId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized(new { message = "Oturum bilgisi bulunamadı." });
         }
 
         try
@@ -66,7 +66,7 @@ public class ModerationController : AppController
         {
             // İş mantığı hatası (kullanıcı bulunamadı, zaten ban var, vs.)
             _logger.LogWarning(ex, "Ban failed for user {UserId}", dto.UserId);
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -78,7 +78,7 @@ public class ModerationController : AppController
         {
             // Beklenmeyen hata
             _logger.LogError(ex, "Error banning user {UserId}", dto.UserId);
-            return StatusCode(500, "An error occurred while banning the user.");
+            return StatusCode(500, new { message = "Kullanıcı yasaklanırken bir hata oluştu." });
         }
     }
 
@@ -93,19 +93,19 @@ public class ModerationController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var adminUserId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized(new { message = "Oturum bilgisi bulunamadı." });
         }
 
         try
         {
             var result = await _moderationService.UnbanUserAsync(userId, adminUserId);
             _logger.LogInformation("User {UserId} unbanned by admin {AdminId}", userId, adminUserId);
-            return Ok(new { message = "User unbanned successfully." });
+            return Ok(new { message = "Kullanıcının yasağı başarıyla kaldırıldı." });
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Unban failed for user {UserId}", userId);
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -115,7 +115,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error unbanning user {UserId}", userId);
-            return StatusCode(500, "An error occurred while unbanning the user.");
+            return StatusCode(500, new { message = "Yasak kaldırılırken bir hata oluştu." });
         }
     }
 
@@ -135,7 +135,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting ban history for user {UserId}", userId);
-            return StatusCode(500, "An error occurred while retrieving ban history.");
+            return StatusCode(500, new { message = "Ban geçmişi getirilirken bir hata oluştu." });
         }
     }
 
@@ -158,7 +158,7 @@ public class ModerationController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var adminUserId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized(new { message = "Oturum bilgisi bulunamadı." });
         }
 
         try
@@ -170,7 +170,7 @@ public class ModerationController : AppController
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Mute failed for user {UserId}", dto.UserId);
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -180,7 +180,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error muting user {UserId}", dto.UserId);
-            return StatusCode(500, "An error occurred while muting the user.");
+            return StatusCode(500, new { message = "Kullanıcı susturulurken bir hata oluştu." });
         }
     }
 
@@ -195,19 +195,19 @@ public class ModerationController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var adminUserId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized(new { message = "Oturum bilgisi bulunamadı." });
         }
 
         try
         {
             var result = await _moderationService.UnmuteUserAsync(userId, adminUserId);
             _logger.LogInformation("User {UserId} unmuted by admin {AdminId}", userId, adminUserId);
-            return Ok(new { message = "User unmuted successfully." });
+            return Ok(new { message = "Kullanıcının susturması başarıyla kaldırıldı." });
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Unmute failed for user {UserId}", userId);
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -217,7 +217,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error unmuting user {UserId}", userId);
-            return StatusCode(500, "An error occurred while unmuting the user.");
+            return StatusCode(500, new { message = "Susturma kaldırılırken bir hata oluştu." });
         }
     }
 
@@ -237,7 +237,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting mute history for user {UserId}", userId);
-            return StatusCode(500, "An error occurred while retrieving mute history.");
+            return StatusCode(500, new { message = "Susturma geçmişi getirilirken bir hata oluştu." });
         }
     }
 
@@ -252,19 +252,19 @@ public class ModerationController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var adminUserId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized(new { message = "Oturum bilgisi bulunamadı." });
         }
 
         try
         {
             var result = await _moderationService.LockThreadAsync(threadId, adminUserId);
             _logger.LogInformation("Thread {ThreadId} locked by admin {AdminId}", threadId, adminUserId);
-            return Ok(new { message = "Thread locked successfully." });
+            return Ok(new { message = "Konu başarıyla kilitlendi." });
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Lock failed for thread {ThreadId}", threadId);
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -274,7 +274,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error locking thread {ThreadId}", threadId);
-            return StatusCode(500, "An error occurred while locking the thread.");
+            return StatusCode(500, new { message = "Konu kilitlenirken bir hata oluştu." });
         }
     }
 
@@ -289,19 +289,19 @@ public class ModerationController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var adminUserId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized(new { message = "Oturum bilgisi bulunamadı." });
         }
 
         try
         {
             var result = await _moderationService.UnlockThreadAsync(threadId, adminUserId);
             _logger.LogInformation("Thread {ThreadId} unlocked by admin {AdminId}", threadId, adminUserId);
-            return Ok(new { message = "Thread unlocked successfully." });
+            return Ok(new { message = "Konu kilidi başarıyla kaldırıldı." });
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Unlock failed for thread {ThreadId}", threadId);
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -311,7 +311,7 @@ public class ModerationController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error unlocking thread {ThreadId}", threadId);
-            return StatusCode(500, "An error occurred while unlocking the thread.");
+            return StatusCode(500, new { message = "Konu kilidi kaldırılırken bir hata oluştu." });
         }
     }
 }

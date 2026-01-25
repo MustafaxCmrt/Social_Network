@@ -1,4 +1,5 @@
 using Application.DTOs.Moderation;
+using Application.DTOs.AuditLog;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Enums;
@@ -11,11 +12,16 @@ namespace Application.Services.Concrete;
 public class ModerationService : IModerationService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditLogService _auditLogService;
     private readonly ILogger<ModerationService> _logger;
 
-    public ModerationService(IUnitOfWork unitOfWork, ILogger<ModerationService> logger)
+    public ModerationService(
+        IUnitOfWork unitOfWork, 
+        IAuditLogService auditLogService,
+        ILogger<ModerationService> logger)
     {
         _unitOfWork = unitOfWork;
+        _auditLogService = auditLogService;
         _logger = logger;
     }
 
@@ -78,6 +84,18 @@ public class ModerationService : IModerationService
         _logger.LogInformation("User {UserId} banned successfully by admin {AdminId}. Expires: {ExpiresAt}", 
             dto.UserId, adminUserId, dto.ExpiresAt?.ToString() ?? "Never");
 
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "BanUser",
+            EntityType = "User",
+            EntityId = dto.UserId,
+            NewValue = $"Banned until {dto.ExpiresAt?.ToString("yyyy-MM-dd HH:mm") ?? "Permanent"}. Reason: {dto.Reason}",
+            Success = true
+        });
+
         // DTO'ya dönüştür
         return new UserBanDto
         {
@@ -122,6 +140,19 @@ public class ModerationService : IModerationService
         await _unitOfWork.SaveChangesAsync();
 
         _logger.LogInformation("User {UserId} unbanned successfully by admin {AdminId}", userId, adminUserId);
+
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "UnbanUser",
+            EntityType = "User",
+            EntityId = userId,
+            OldValue = $"Banned (Reason: {activeBan.Reason})",
+            NewValue = "Unbanned",
+            Success = true
+        });
 
         return true;
     }
@@ -184,7 +215,17 @@ public class ModerationService : IModerationService
 
         _logger.LogInformation("User {UserId} muted successfully by admin {AdminId}. Expires: {ExpiresAt}", 
             dto.UserId, adminUserId, dto.ExpiresAt);
-
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "MuteUser",
+            EntityType = "User",
+            EntityId = dto.UserId,
+            NewValue = $"Muted until {dto.ExpiresAt:yyyy-MM-dd HH:mm}. Reason: {dto.Reason}",
+            Success = true
+        });
         // DTO'ya dönüştür
         return new UserMuteDto
         {
@@ -230,6 +271,19 @@ public class ModerationService : IModerationService
 
         _logger.LogInformation("User {UserId} unmuted successfully by admin {AdminId}", userId, adminUserId);
 
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "UnmuteUser",
+            EntityType = "User",
+            EntityId = userId,
+            OldValue = $"Muted (Reason: {activeMute.Reason})",
+            NewValue = "Unmuted",
+            Success = true
+        });
+
         return true;
     }
 
@@ -263,6 +317,19 @@ public class ModerationService : IModerationService
 
         _unitOfWork.Threads.Update(thread);
         await _unitOfWork.SaveChangesAsync();
+
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "LockThread",
+            EntityType = "Thread",
+            EntityId = threadId,
+            OldValue = $"Title: {thread.Title}, IsLocked: false",
+            NewValue = $"Title: {thread.Title}, IsLocked: true",
+            Success = true
+        });
 
         _logger.LogInformation("Thread {ThreadId} locked successfully by admin {AdminId}", threadId, adminUserId);
 
@@ -301,7 +368,18 @@ public class ModerationService : IModerationService
         await _unitOfWork.SaveChangesAsync();
 
         _logger.LogInformation("Thread {ThreadId} unlocked successfully by admin {AdminId}", threadId, adminUserId);
-
+        // Audit log kaydet
+        await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+        {
+            UserId = adminUserId,
+            Username = admin.Username,
+            Action = "UnlockThread",
+            EntityType = "Thread",
+            EntityId = threadId,
+            OldValue = "Locked",
+            NewValue = "Unlocked",
+            Success = true
+        });
         return true;
     }
 

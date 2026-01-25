@@ -100,6 +100,7 @@ public static class ServiceRegistration
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
 
         return services;
     }

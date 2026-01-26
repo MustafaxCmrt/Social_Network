@@ -137,19 +137,25 @@ public class UserController : AppController
     }
 
     /// <summary>
-    /// Tüm kullanıcıları listeler (Sadece Admin)
+    /// Tüm kullanıcıları listeler (Sadece Admin) - Pagination ve search destekli
     /// </summary>
+    /// <param name="page">Sayfa numarası (default: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt sayısı (default: 10, max: 100)</param>
+    /// <param name="search">Arama terimi (username, firstName, lastName, email)</param>
     /// <returns>
-    /// 200 OK - Kullanıcı listesi
+    /// 200 OK - Sayfalanmış kullanıcı listesi
     /// 403 Forbidden - Yetki yok
     /// </returns>
     [HttpGet("getAll")]
     [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(List<UserListDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Application.DTOs.Common.PagedResultDto<UserListDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetAllUsers()
+    public async Task<IActionResult> GetAllUsers(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null)
     {
-        var users = await _userService.GetAllUsersAsync(HttpContext.RequestAborted);
+        var users = await _userService.GetAllUsersAsync(page, pageSize, search, HttpContext.RequestAborted);
         return Ok(users);
     }
 

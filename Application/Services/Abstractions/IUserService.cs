@@ -24,11 +24,18 @@ public interface IUserService
     Task<GetUserDto?> GetUserByIdAsync(int userId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Tüm kullanıcıları listeler (Admin)
+    /// Tüm kullanıcıları listeler (Admin) - Pagination ve search destekli
     /// </summary>
+    /// <param name="page">Sayfa numarası (default: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt sayısı (default: 10, max: 100)</param>
+    /// <param name="searchTerm">Arama terimi (username, firstName, lastName, email)</param>
     /// <param name="cancellationToken">İptal token'ı</param>
-    /// <returns>Kullanıcı listesi</returns>
-    Task<List<UserListDto>> GetAllUsersAsync(CancellationToken cancellationToken = default);
+    /// <returns>Sayfalanmış kullanıcı listesi</returns>
+    Task<Application.DTOs.Common.PagedResultDto<UserListDto>> GetAllUsersAsync(
+        int page = 1, 
+        int pageSize = 10, 
+        string? searchTerm = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Kullanıcı bilgilerini günceller

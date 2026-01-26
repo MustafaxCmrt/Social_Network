@@ -117,24 +117,65 @@ public class UserService : IUserService
     }
 
     /// <summary>
-    /// Tüm kullanıcıları listeler (Admin)
+    /// Tüm kullanıcıları listeler (Admin) - Pagination ve search destekli
     /// </summary>
-    public async Task<List<UserListDto>> GetAllUsersAsync(CancellationToken cancellationToken = default)
+    public async Task<Application.DTOs.Common.PagedResultDto<UserListDto>> GetAllUsersAsync(
+        int page = 1, 
+        int pageSize = 10, 
+        string? searchTerm = null,
+        CancellationToken cancellationToken = default)
     {
+        // Parametreleri validate et
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 100) pageSize = 100; // Maksimum 100 kayıt
+
         var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
         
         // IsDeleted olmayan kullanıcıları filtrele
-        var users = allUsers.Where(u => !u.IsDeleted).ToList();
+        var query = allUsers.Where(u => !u.IsDeleted).AsQueryable();
 
-        return users.Select(u => new UserListDto
+        // Search filtresi varsa uygula
+        if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            UserId = u.Id,
-            Username = u.Username,
-            ProfileImg = u.ProfileImg,
-            Email = u.Email,
-            Role = u.Role.ToString(),
-            IsActive = u.IsActive
-        }).ToList();
+            var lowerSearchTerm = searchTerm.ToLower();
+            query = query.Where(u => 
+                u.Username.ToLower().Contains(lowerSearchTerm) ||
+                u.FirstName.ToLower().Contains(lowerSearchTerm) ||
+                u.LastName.ToLower().Contains(lowerSearchTerm) ||
+                u.Email.ToLower().Contains(lowerSearchTerm));
+        }
+
+        // Toplam kayıt sayısı
+        var totalCount = query.Count();
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        // Pagination uygula
+        var users = query
+            .OrderByDescending(u => u.CreatedAt) // En yeni kullanıcılar önce
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new UserListDto
+            {
+                UserId = u.Id,
+                Username = u.Username,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                ProfileImg = u.ProfileImg,
+                Email = u.Email,
+                Role = u.Role.ToString(),
+                IsActive = u.IsActive
+            })
+            .ToList();
+
+        return new Application.DTOs.Common.PagedResultDto<UserListDto>
+        {
+            Items = users,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 
     /// <summary>

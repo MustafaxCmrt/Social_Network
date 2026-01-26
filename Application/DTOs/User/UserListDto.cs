@@ -16,6 +16,16 @@ public class UserListDto
     public string Username { get; set; } = null!;
 
     /// <summary>
+    /// Adı
+    /// </summary>
+    public string FirstName { get; set; } = null!;
+
+    /// <summary>
+    /// Soyadı
+    /// </summary>
+    public string LastName { get; set; } = null!;
+
+    /// <summary>
     /// Profil resmi URL
     /// </summary>
     public string? ProfileImg { get; set; }

@@ -1,5 +1,6 @@
 using Application.DTOs.Moderation;
 using Application.DTOs.AuditLog;
+using Application.DTOs.Search;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Enums;
@@ -390,6 +391,25 @@ public class ModerationService : IModerationService
                 .Include(b => b.User)
                 .Include(b => b.BannedByUser));
 
+        // Süresi dolmuş ama hala aktif olan ban'ları otomatik pasif yap
+        var expiredBans = existingBans
+            .Where(b => b.IsActive && b.ExpiresAt.HasValue && b.ExpiresAt <= DateTime.UtcNow)
+            .ToList();
+
+        if (expiredBans.Any())
+        {
+            foreach (var expiredBan in expiredBans)
+            {
+                expiredBan.IsActive = false;
+                expiredBan.UpdatedAt = DateTime.UtcNow;
+                _unitOfWork.UserBans.Update(expiredBan);
+            }
+            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("{Count} expired ban(s) automatically deactivated for user {UserId}", 
+                expiredBans.Count, userId);
+        }
+
+        // Artık sadece süresi dolmamış ve aktif olan ban'ı bul
         var activeBan = existingBans
             .Where(b => b.UserId == userId && b.IsActive)
             .Where(b => b.ExpiresAt == null || b.ExpiresAt > DateTime.UtcNow) // Süresi dolmamış veya kalıcı
@@ -423,6 +443,25 @@ public class ModerationService : IModerationService
                 .Include(m => m.User)
                 .Include(m => m.MutedByUser));
 
+        // Süresi dolmuş ama hala aktif olan mute'ları otomatik pasif yap
+        var expiredMutes = existingMutes
+            .Where(m => m.IsActive && m.ExpiresAt <= DateTime.UtcNow)
+            .ToList();
+
+        if (expiredMutes.Any())
+        {
+            foreach (var expiredMute in expiredMutes)
+            {
+                expiredMute.IsActive = false;
+                expiredMute.UpdatedAt = DateTime.UtcNow;
+                _unitOfWork.UserMutes.Update(expiredMute);
+            }
+            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("{Count} expired mute(s) automatically deactivated for user {UserId}", 
+                expiredMutes.Count, userId);
+        }
+
+        // Artık sadece süresi dolmamış ve aktif olan mute'u bul
         var activeMute = existingMutes
             .Where(m => m.UserId == userId && m.IsActive)
             .Where(m => m.ExpiresAt > DateTime.UtcNow) // Süresi dolmamış
@@ -456,8 +495,28 @@ public class ModerationService : IModerationService
                 .Include(b => b.User)
                 .Include(b => b.BannedByUser));
 
-        return bans
-            .Where(b => b.UserId == userId)
+        // Kullanıcının tüm ban'larını al
+        var userBans = bans.Where(b => b.UserId == userId).ToList();
+
+        // Süresi dolmuş ama hala aktif olan ban'ları otomatik pasif yap
+        var expiredBans = userBans
+            .Where(b => b.IsActive && b.ExpiresAt.HasValue && b.ExpiresAt <= DateTime.UtcNow)
+            .ToList();
+
+        if (expiredBans.Any())
+        {
+            foreach (var expiredBan in expiredBans)
+            {
+                expiredBan.IsActive = false;
+                expiredBan.UpdatedAt = DateTime.UtcNow;
+                _unitOfWork.UserBans.Update(expiredBan);
+            }
+            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("{Count} expired ban(s) automatically deactivated for user {UserId}", 
+                expiredBans.Count, userId);
+        }
+
+        return userBans
             .OrderByDescending(b => b.BannedAt)
             .Select(b => new UserBanDto
             {
@@ -480,8 +539,28 @@ public class ModerationService : IModerationService
                 .Include(m => m.User)
                 .Include(m => m.MutedByUser));
 
-        return mutes
-            .Where(m => m.UserId == userId)
+        // Kullanıcının tüm mute'larını al
+        var userMutes = mutes.Where(m => m.UserId == userId).ToList();
+
+        // Süresi dolmuş ama hala aktif olan mute'ları otomatik pasif yap
+        var expiredMutes = userMutes
+            .Where(m => m.IsActive && m.ExpiresAt <= DateTime.UtcNow)
+            .ToList();
+
+        if (expiredMutes.Any())
+        {
+            foreach (var expiredMute in expiredMutes)
+            {
+                expiredMute.IsActive = false;
+                expiredMute.UpdatedAt = DateTime.UtcNow;
+                _unitOfWork.UserMutes.Update(expiredMute);
+            }
+            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("{Count} expired mute(s) automatically deactivated for user {UserId}", 
+                expiredMutes.Count, userId);
+        }
+
+        return userMutes
             .OrderByDescending(m => m.MutedAt)
             .Select(m => new UserMuteDto
             {
@@ -495,5 +574,72 @@ public class ModerationService : IModerationService
                 ExpiresAt = m.ExpiresAt,
                 IsActive = m.IsActive
             });
+    }
+
+    public async Task<IEnumerable<SearchUserResultDto>> SearchUsersAsync(string searchTerm)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return Enumerable.Empty<SearchUserResultDto>();
+        }
+
+        var users = await _unitOfWork.Users.GetAllAsync();
+        var lowerSearchTerm = searchTerm.ToLower();
+
+        var matchedUsers = users
+            .Where(u => u.Username.ToLower().Contains(lowerSearchTerm) ||
+                       u.FirstName.ToLower().Contains(lowerSearchTerm) ||
+                       u.LastName.ToLower().Contains(lowerSearchTerm))
+            .Take(20) // Maksimum 20 sonuç
+            .Select(u => new SearchUserResultDto
+            {
+                UserId = u.Id,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                Username = u.Username,
+                ProfileImg = u.ProfileImg,
+                Role = u.Role.ToString(),
+                TotalThreads = 0, // Performans için şimdilik 0
+                TotalPosts = 0,
+                CreatedAt = u.CreatedAt
+            });
+
+        return matchedUsers;
+    }
+
+    public async Task<IEnumerable<SearchThreadResultDto>> SearchThreadsAsync(string searchTerm)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return Enumerable.Empty<SearchThreadResultDto>();
+        }
+
+        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
+            include: query => query
+                .Include(t => t.User)
+                .Include(t => t.Category));
+
+        var lowerSearchTerm = searchTerm.ToLower();
+
+        var matchedThreads = threads
+            .Where(t => t.Title.ToLower().Contains(lowerSearchTerm))
+            .Take(20) // Maksimum 20 sonuç
+            .Select(t => new SearchThreadResultDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Content = t.Content,
+                ViewCount = t.ViewCount,
+                IsSolved = t.IsSolved,
+                PostCount = t.PostCount,
+                UserId = t.UserId,
+                Username = t.User?.Username ?? string.Empty,
+                CategoryId = t.CategoryId,
+                CategoryName = t.Category?.Title ?? string.Empty,
+                CreatedAt = t.CreatedAt,
+                UpdatedAt = t.UpdatedAt
+            });
+
+        return matchedThreads;
     }
 }

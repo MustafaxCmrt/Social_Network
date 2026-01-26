@@ -314,4 +314,56 @@ public class ModerationController : AppController
             return StatusCode(500, new { message = "Konu kilidi kaldırılırken bir hata oluştu." });
         }
     }
+
+    /// <summary>
+    /// Kullanıcı adı veya isim-soyisme göre kullanıcı arar (Admin paneli)
+    /// </summary>
+    /// <param name="q">Aranacak kelime (username, firstName, lastName)</param>
+    /// <returns>Eşleşen kullanıcılar</returns>
+    [HttpGet("search/users")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SearchUsers([FromQuery] string q)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+        {
+            return BadRequest(new { message = "Arama terimi en az 2 karakter olmalıdır." });
+        }
+
+        try
+        {
+            var users = await _moderationService.SearchUsersAsync(q);
+            return Ok(users);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching users with term: {SearchTerm}", q);
+            return StatusCode(500, new { message = "Kullanıcı arama sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Thread başlığına göre thread arar (Admin paneli)
+    /// </summary>
+    /// <param name="q">Aranacak kelime (thread title)</param>
+    /// <returns>Eşleşen thread'ler</returns>
+    [HttpGet("search/threads")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SearchThreads([FromQuery] string q)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+        {
+            return BadRequest(new { message = "Arama terimi en az 2 karakter olmalıdır." });
+        }
+
+        try
+        {
+            var threads = await _moderationService.SearchThreadsAsync(q);
+            return Ok(threads);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching threads with term: {SearchTerm}", q);
+            return StatusCode(500, new { message = "Konu arama sırasında bir hata oluştu." });
+        }
+    }
 }

@@ -82,4 +82,18 @@ public interface IModerationService
     /// <param name="userId">Kullanıcı ID'si</param>
     /// <returns>Mute geçmişi listesi</returns>
     Task<IEnumerable<UserMuteDto>> GetUserMuteHistoryAsync(int userId);
+
+    /// <summary>
+    /// Kullanıcı adı veya isim-soyisme göre kullanıcı arar (Admin paneli için)
+    /// </summary>
+    /// <param name="searchTerm">Aranacak kelime (username, firstName, lastName)</param>
+    /// <returns>Eşleşen kullanıcılar</returns>
+    Task<IEnumerable<Application.DTOs.Search.SearchUserResultDto>> SearchUsersAsync(string searchTerm);
+
+    /// <summary>
+    /// Thread başlığına göre thread arar (Admin paneli için)
+    /// </summary>
+    /// <param name="searchTerm">Aranacak kelime (thread title)</param>
+    /// <returns>Eşleşen thread'ler</returns>
+    Task<IEnumerable<Application.DTOs.Search.SearchThreadResultDto>> SearchThreadsAsync(string searchTerm);
 }

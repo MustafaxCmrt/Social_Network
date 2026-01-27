@@ -3,6 +3,7 @@ using Application.DTOs.AuditLog;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Persistence.UnitOfWork;
 
 namespace Application.Services.Concrete;
@@ -52,7 +53,7 @@ public class UserService : IUserService
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
         // 4. Role enum'a çevir
-        if (!Enum.TryParse<Roles>(request.Role, out var role))
+        if (!Enum.TryParse<Roles>(request.Role, ignoreCase: true, out var role))
             return null; // Geçersiz rol
 
         // 5. Yeni kullanıcı oluştur
@@ -239,6 +240,15 @@ public class UserService : IUserService
             user.IsActive = request.IsActive.Value;
         }
 
+        // 7.5. Role sadece admin değiştirebilir
+        if (isAdmin && !string.IsNullOrWhiteSpace(request.Role))
+        {
+            if (Enum.TryParse<Roles>(request.Role, ignoreCase: true, out var role))
+            {
+                user.Role = role;
+            }
+        }
+
         // 8. UpdatedAt güncelle
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -274,6 +284,7 @@ public class UserService : IUserService
 
         // Soft delete
         user.IsDeleted = true;
+        user.DeletedDate = DateTime.UtcNow;
         user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -332,6 +343,7 @@ public class UserService : IUserService
             FirstName = user.FirstName,
             LastName = user.LastName,
             Username = user.Username,
+            Email = user.Email,
             ProfileImg = user.ProfileImg,
             Role = user.Role.ToString(),
             CreatedAt = user.CreatedAt,
@@ -479,8 +491,11 @@ public class UserService : IUserService
         // Toplam sayfa sayısını hesapla
         var totalPages = (int)Math.Ceiling(totalThreads / (double)pageSize);
 
-        // Thread'leri sayfalama ile getir
-        var allThreads = await _unitOfWork.Threads.GetAllAsync(cancellationToken);
+        // Thread'leri Posts bilgisiyle birlikte getir (PostCount için)
+        var allThreads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
+            include: q => q.Include(t => t.Posts),
+            cancellationToken
+        );
         var userThreads = allThreads
             .Where(t => t.UserId == userId && !t.IsDeleted)
             .OrderByDescending(t => t.CreatedAt)
@@ -492,6 +507,7 @@ public class UserService : IUserService
                 Title = t.Title,
                 Content = t.Content,
                 ViewCount = t.ViewCount,
+                PostCount = t.Posts.Count(p => !p.IsDeleted),
                 IsSolved = t.IsSolved,
                 UserId = t.UserId,
                 CategoryId = t.CategoryId,
@@ -545,8 +561,11 @@ public class UserService : IUserService
         // Toplam sayfa sayısını hesapla
         var totalPages = (int)Math.Ceiling(totalPosts / (double)pageSize);
 
-        // Post'ları sayfalama ile getir
-        var allPosts = await _unitOfWork.Posts.GetAllAsync(cancellationToken);
+        // Post'ları Thread bilgisiyle birlikte getir
+        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
+            include: q => q.Include(p => p.Thread),
+            cancellationToken
+        );
         var userPosts = allPosts
             .Where(p => p.UserId == userId && !p.IsDeleted)
             .OrderByDescending(p => p.CreatedAt)
@@ -556,6 +575,7 @@ public class UserService : IUserService
             {
                 Id = p.Id,
                 ThreadId = p.ThreadId,
+                ThreadTitle = p.Thread?.Title ?? "Bilinmeyen Konu",
                 UserId = p.UserId,
                 Content = p.Content,
                 Img = p.Img,

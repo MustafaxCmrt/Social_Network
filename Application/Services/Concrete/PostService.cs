@@ -595,6 +595,7 @@ public class PostService : IPostService
         {
             Id = post.Id,
             ThreadId = post.ThreadId,
+            ThreadTitle = post.Thread?.Title ?? "Bilinmeyen Konu",
             UserId = post.UserId,
             Content = post.Content,
             Img = post.Img,

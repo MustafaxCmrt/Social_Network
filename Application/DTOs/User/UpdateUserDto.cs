@@ -39,4 +39,9 @@ public class UpdateUserDto
     /// Hesap aktif mi? (sadece admin değiştirebilir)
     /// </summary>
     public bool? IsActive { get; set; }
+
+    /// <summary>
+    /// Kullanıcı rolü (sadece admin değiştirebilir)
+    /// </summary>
+    public string? Role { get; set; }
 }

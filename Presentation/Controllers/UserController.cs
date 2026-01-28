@@ -74,10 +74,16 @@ public class UserController : AppController
             });
         }
 
-        // 2. Kullanıcı oluştur
-        var result = await _userService.CreateUserAsync(request, HttpContext.RequestAborted);
+        // 2. Token'dan currentUserId al (Admin)
+        var currentUserIdClaim = User.FindFirst("UserId")?.Value;
 
-        // 3. Username veya Email zaten kullanılıyor
+        if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out int currentUserId))
+            return Unauthorized(new { message = "Geçersiz token" });
+
+        // 3. Kullanıcı oluştur
+        var result = await _userService.CreateUserAsync(request, currentUserId, HttpContext.RequestAborted);
+
+        // 4. Username veya Email zaten kullanılıyor
         if (result == null)
         {
             return Conflict(new
@@ -86,7 +92,7 @@ public class UserController : AppController
             });
         }
 
-        // 4. Başarılı - 201 Created
+        // 5. Başarılı - 201 Created
         return CreatedAtAction(
             nameof(GetUserById),
             new { id = result.UserId },
@@ -235,7 +241,13 @@ public class UserController : AppController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var result = await _userService.DeleteUserAsync(id, HttpContext.RequestAborted);
+        // Token'dan currentUserId al (Admin)
+        var currentUserIdClaim = User.FindFirst("UserId")?.Value;
+
+        if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out int currentUserId))
+            return Unauthorized(new { message = "Geçersiz token" });
+
+        var result = await _userService.DeleteUserAsync(id, currentUserId, HttpContext.RequestAborted);
 
         if (!result)
         {

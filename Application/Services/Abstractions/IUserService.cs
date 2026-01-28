@@ -11,9 +11,10 @@ public interface IUserService
     /// Yeni kullanıcı oluşturur (Admin)
     /// </summary>
     /// <param name="request">Oluşturulacak kullanıcı bilgileri</param>
+    /// <param name="currentUserId">İşlemi yapan admin kullanıcının ID'si</param>
     /// <param name="cancellationToken">İptal token'ı</param>
     /// <returns>Oluşturulan kullanıcı bilgileri, başarısızsa null</returns>
-    Task<CreateUserResponseDto?> CreateUserAsync(CreateUserDto request, CancellationToken cancellationToken = default);
+    Task<CreateUserResponseDto?> CreateUserAsync(CreateUserDto request, int currentUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// ID'ye göre kullanıcı bilgilerini getirir
@@ -52,9 +53,10 @@ public interface IUserService
     /// Kullanıcıyı siler (soft delete - Admin)
     /// </summary>
     /// <param name="userId">Silinecek kullanıcının ID'si</param>
+    /// <param name="currentUserId">İşlemi yapan admin kullanıcının ID'si</param>
     /// <param name="cancellationToken">İptal token'ı</param>
     /// <returns>Silme başarılıysa true, değilse false</returns>
-    Task<bool> DeleteUserAsync(int userId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteUserAsync(int userId, int currentUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Giriş yapan kullanıcının kendi profil bilgilerini getirir

@@ -146,4 +146,108 @@ public class EmailService : IEmailService
 
         await SendEmailAsync(to, subject, body, isHtml: true);
     }
+
+    public async Task SendEmailChangeNotificationAsync(string to, string userName, string newEmail, bool changedByAdmin = false)
+    {
+        var subject = "Email Adresiniz Değiştirildi";
+        var changedByText = changedByAdmin 
+            ? "Hesabınızın email adresi <strong>sistem yöneticisi (admin) tarafından</strong> değiştirildi." 
+            : "Hesabınızın email adresi değiştirildi.";
+        var securityNote = changedByAdmin
+            ? "Eğer bu değişikliği talep etmediyseniz, <strong>derhal</strong> destek ekibimizle iletişime geçin ve hesabınızın güvenliğini kontrol edin."
+            : "Eğer bu değişikliği siz yapmadıysanız, hesabınız tehlikede olabilir! <strong>Derhal</strong> destek ekibimizle iletişime geçin.";
+        
+        var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #FF9800; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 20px; background-color: #f9f9f9; }}
+        .warning {{ background-color: #fff3cd; border-left: 4px solid #FF9800; padding: 12px; margin: 20px 0; }}
+        .footer {{ margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>⚠️ Email Değişikliği</h1>
+        </div>
+        <div class='content'>
+            <p>Merhaba {userName},</p>
+            <p>{changedByText}</p>
+            <div class='warning'>
+                <p><strong>Eski Email:</strong> {to}</p>
+                <p><strong>Yeni Email:</strong> {newEmail}</p>
+                {(changedByAdmin ? "<p><strong>Değiştiren:</strong> Sistem Yöneticisi (Admin)</p>" : "")}
+            </div>
+            <p><strong>⚠️ Önemli Güvenlik Bilgisi:</strong></p>
+            <ul>
+                <li>Yeni email adresi doğrulanana kadar hesabınıza giriş yapamazsınız</li>
+                <li>Tüm aktif oturumlarınız sonlandırılmıştır</li>
+                <li>Yeni email adresinize doğrulama linki gönderilmiştir</li>
+            </ul>
+            <p>{securityNote}</p>
+        </div>
+        <div class='footer'>
+            <p>© {DateTime.UtcNow.Year} Social Network. Tüm hakları saklıdır.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        await SendEmailAsync(to, subject, body, isHtml: true);
+    }
+
+    public async Task SendEmailChangeVerificationAsync(string to, string verificationToken, string userName)
+    {
+        var verificationLink = $"{_configuration["AppSettings:FrontendUrl"]}/verify-email?token={verificationToken}";
+        
+        var subject = "Yeni Email Adresinizi Doğrulayın";
+        var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #2196F3; color: white; padding: 20px; text-align: center; }}
+        .content {{ padding: 20px; background-color: #f9f9f9; }}
+        .button {{ display: inline-block; padding: 12px 24px; margin: 20px 0; background-color: #2196F3; color: white; text-decoration: none; border-radius: 4px; }}
+        .info {{ background-color: #d1ecf1; border-left: 4px solid #2196F3; padding: 12px; margin: 20px 0; }}
+        .footer {{ margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>Email Doğrulama</h1>
+        </div>
+        <div class='content'>
+            <p>Merhaba {userName},</p>
+            <p>Email adresinizi değiştirdiniz. Yeni email adresinizi doğrulamak için aşağıdaki butona tıklayın:</p>
+            <a href='{verificationLink}' class='button'>Yeni Email'imi Doğrula</a>
+            <p>Veya bu linki tarayıcınıza yapıştırın:</p>
+            <p style='word-break: break-all; color: #666;'>{verificationLink}</p>
+            <div class='info'>
+                <p><strong>ℹ️ Önemli:</strong></p>
+                <ul style='margin: 0; padding-left: 20px;'>
+                    <li>Email doğrulaması tamamlanana kadar hesabınıza giriş yapamazsınız</li>
+                    <li>Tüm aktif oturumlarınız güvenlik nedeniyle sonlandırılmıştır</li>
+                    <li>Doğrulama sonrası yeni email adresinizle giriş yapabilirsiniz</li>
+                </ul>
+            </div>
+            <p>Eğer bu değişikliği siz yapmadıysanız, bu email'i görmezden gelebilir ve eski email adresinizle giriş yapmaya devam edebilirsiniz.</p>
+        </div>
+        <div class='footer'>
+            <p>© {DateTime.UtcNow.Year} Social Network. Tüm hakları saklıdır.</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+        await SendEmailAsync(to, subject, body, isHtml: true);
+    }
 }

@@ -5,6 +5,8 @@ using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Persistence.UnitOfWork;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Application.Services.Concrete;
 
@@ -15,11 +17,13 @@ public class UserService : IUserService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogService _auditLogService;
+    private readonly IEmailService _emailService;
 
-    public UserService(IUnitOfWork unitOfWork, IAuditLogService auditLogService)
+    public UserService(IUnitOfWork unitOfWork, IAuditLogService auditLogService, IEmailService emailService)
     {
         _unitOfWork = unitOfWork;
         _auditLogService = auditLogService;
+        _emailService = emailService;
     }
 
     /// <summary>
@@ -29,7 +33,7 @@ public class UserService : IUserService
     /// 3. Yeni kullanıcı oluştur
     /// 4. Veritabanına kaydet
     /// </summary>
-    public async Task<CreateUserResponseDto?> CreateUserAsync(CreateUserDto request, CancellationToken cancellationToken = default)
+    public async Task<CreateUserResponseDto?> CreateUserAsync(CreateUserDto request, int currentUserId, CancellationToken cancellationToken = default)
     {
         // 1. Username zaten kullanılıyor mu kontrol et
         var usernameExists = await _unitOfWork.Users.AnyAsync(
@@ -67,7 +71,8 @@ public class UserService : IUserService
             Role = role,
             IsActive = request.IsActive,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            CreatedUserId = currentUserId // Admin oluşturdu
         };
 
         // 6. Veritabanına kaydet
@@ -210,7 +215,7 @@ public class UserService : IUserService
             user.Username = request.Username;
         }
 
-        // 4. Email değiştiriliyorsa unique kontrolü
+        // 4. Email değiştiriliyorsa unique kontrolü + doğrulama süreci
         if (!string.IsNullOrWhiteSpace(request.Email) && request.Email != user.Email)
         {
             var emailExists = await _unitOfWork.Users.AnyAsync(
@@ -221,7 +226,50 @@ public class UserService : IUserService
             if (emailExists)
                 return null; // Email zaten kullanılıyor
 
+            // Email değişikliği güvenlik süreci (Admin değiştirse bile doğrulama gerekli):
+            var oldEmail = user.Email;
+            
+            // 1. Yeni email doğrulama token'ı oluştur
+            var plainToken = Guid.NewGuid().ToString();
+            var hashedToken = HashToken(plainToken);
+            
+            // 2. Email'i güncelle ancak doğrulanmamış olarak işaretle
             user.Email = request.Email;
+            user.EmailVerified = false; // Admin değiştirse bile tekrar doğrulama gerekli!
+            user.EmailVerificationToken = hashedToken;
+            user.EmailVerificationTokenCreatedAt = DateTime.UtcNow;
+            
+            // 3. Güvenlik: Kullanıcının tüm aktif oturumlarını sonlandır
+            user.RefreshTokenVersion++;
+            
+            // 4. Eski email'e bilgilendirme gönder
+            try
+            {
+                await _emailService.SendEmailChangeNotificationAsync(
+                    oldEmail,
+                    user.FirstName,
+                    request.Email,
+                    changedByAdmin: true // Admin kullanıcının email'ini değiştiriyor
+                );
+            }
+            catch (Exception)
+            {
+                // Email gönderme hatası loglansın ama işlemi durdurmaz
+            }
+            
+            // 5. Yeni email'e doğrulama email'i gönder
+            try
+            {
+                await _emailService.SendEmailChangeVerificationAsync(
+                    request.Email,
+                    plainToken, // Düz token email'de
+                    user.FirstName
+                );
+            }
+            catch (Exception)
+            {
+                // Email gönderme hatası olsa bile değişiklik devam eder
+            }
         }
 
         // 5. Temel bilgileri güncelle
@@ -249,8 +297,9 @@ public class UserService : IUserService
             }
         }
 
-        // 8. UpdatedAt güncelle
+        // 8. UpdatedAt ve UpdatedUserId güncelle
         user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedUserId = currentUserId; // Kim güncelledi (kullanıcı kendisi veya admin)
 
         // 9. Veritabanına kaydet
         _unitOfWork.Users.Update(user);
@@ -275,7 +324,7 @@ public class UserService : IUserService
     /// Kullanıcıyı siler (soft delete - Admin)
     /// IsDeleted flag'ini true yapar
     /// </summary>
-    public async Task<bool> DeleteUserAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteUserAsync(int userId, int currentUserId, CancellationToken cancellationToken = default)
     {
         var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
 
@@ -285,8 +334,10 @@ public class UserService : IUserService
         // Soft delete
         user.IsDeleted = true;
         user.DeletedDate = DateTime.UtcNow;
+        user.DeletedUserId = currentUserId; // Admin sildi
         user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedUserId = currentUserId; // Admin güncelledi
 
         _unitOfWork.Users.Update(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -378,7 +429,7 @@ public class UserService : IUserService
             user.Username = request.Username;
         }
 
-        // 2. Email değiştiriliyorsa unique kontrolü
+        // 2. Email değiştiriliyorsa unique kontrolü + doğrulama süreci
         if (!string.IsNullOrWhiteSpace(request.Email) && request.Email != user.Email)
         {
             var emailExists = await _unitOfWork.Users.AnyAsync(
@@ -389,7 +440,51 @@ public class UserService : IUserService
             if (emailExists)
                 throw new InvalidOperationException("Bu email adresi zaten kullanılıyor");
 
+            // Email değişikliği güvenlik süreci:
+            var oldEmail = user.Email;
+            
+            // 1. Yeni email doğrulama token'ı oluştur
+            var plainToken = Guid.NewGuid().ToString();
+            var hashedToken = HashToken(plainToken);
+            
+            // 2. Email'i güncelle ancak doğrulanmamış olarak işaretle
             user.Email = request.Email;
+            user.EmailVerified = false; // Tekrar doğrulama gerekli!
+            user.EmailVerificationToken = hashedToken;
+            user.EmailVerificationTokenCreatedAt = DateTime.UtcNow;
+            
+            // 3. Güvenlik: Tüm aktif oturumları sonlandır (refresh token version'ı artır)
+            user.RefreshTokenVersion++;
+            
+            // 4. Eski email'e bilgilendirme gönder (async, hata durumunda devam et)
+            try
+            {
+                await _emailService.SendEmailChangeNotificationAsync(
+                    oldEmail,
+                    user.FirstName,
+                    request.Email,
+                    changedByAdmin: false // Kullanıcı kendi email'ini değiştiriyor
+                );
+            }
+            catch (Exception)
+            {
+                // Email gönderme hatası loglansın ama işlemi durdurmaz
+            }
+            
+            // 5. Yeni email'e doğrulama email'i gönder
+            try
+            {
+                await _emailService.SendEmailChangeVerificationAsync(
+                    request.Email,
+                    plainToken, // Düz token email'de
+                    user.FirstName
+                );
+            }
+            catch (Exception)
+            {
+                // Email gönderme hatası olsa bile değişiklik devam eder
+                // Kullanıcı daha sonra yeniden doğrulama email'i isteyebilir
+            }
         }
 
         // 3. Temel bilgileri güncelle
@@ -422,8 +517,9 @@ public class UserService : IUserService
             user.RefreshTokenVersion++;
         }
 
-        // 5. UpdatedAt güncelle
+        // 5. UpdatedAt ve UpdatedUserId güncelle
         user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedUserId = userId; // Kullanıcı kendi profilini güncelliyor
 
         // 6. Veritabanına kaydet
         _unitOfWork.Users.Update(user);
@@ -451,6 +547,7 @@ public class UserService : IUserService
         // Soft delete
         user.IsDeleted = true;
         user.DeletedDate = DateTime.UtcNow;
+        user.DeletedUserId = userId; // Kim sildi
         user.IsActive = false;
 
         _unitOfWork.Users.Update(user);
@@ -618,5 +715,16 @@ public class UserService : IUserService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return user.ProfileImg;
+    }
+    
+    /// <summary>
+    /// Token'ı SHA256 ile hashler (email doğrulama token'ları için)
+    /// </summary>
+    private static string HashToken(string token)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash); // 64 karakter hex string
     }
 }

@@ -30,4 +30,21 @@ public interface IEmailService
     /// <param name="verificationToken">Verification token (düz metin GUID)</param>
     /// <param name="userName">Kullanıcı adı</param>
     Task SendEmailVerificationAsync(string to, string verificationToken, string userName);
+    
+    /// <summary>
+    /// Email değişikliği bildirim email'i gönderir (eski email'e)
+    /// </summary>
+    /// <param name="to">Eski email adresi</param>
+    /// <param name="userName">Kullanıcı adı</param>
+    /// <param name="newEmail">Yeni email adresi</param>
+    /// <param name="changedByAdmin">Admin tarafından mı değiştirildi?</param>
+    Task SendEmailChangeNotificationAsync(string to, string userName, string newEmail, bool changedByAdmin = false);
+    
+    /// <summary>
+    /// Email değişikliği doğrulama email'i gönderir (yeni email'e)
+    /// </summary>
+    /// <param name="to">Yeni email adresi</param>
+    /// <param name="verificationToken">Verification token (düz metin GUID)</param>
+    /// <param name="userName">Kullanıcı adı</param>
+    Task SendEmailChangeVerificationAsync(string to, string verificationToken, string userName);
 }

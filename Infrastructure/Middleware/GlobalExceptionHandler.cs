@@ -22,6 +22,17 @@ public class GlobalExceptionHandler
         {
             await _next(context);
         }
+        catch (OperationCanceledException)
+        {
+            // Client isteği iptal etti (sayfa değişti, bağlantı koptu vb.)
+            // Bu normal bir durum, sessizce handle et
+            _logger.LogDebug("Request was cancelled by the client: {Path}", context.Request.Path);
+            
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = 499; // Client Closed Request (nginx standardı)
+            }
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);

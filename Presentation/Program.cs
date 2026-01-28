@@ -84,6 +84,10 @@ try
     app.UseCors("AllowAll");
     app.UseRateLimiter();
     app.UseAuthentication();
+    
+    // Token version validation - Email/şifre değişikliğinde anında logout
+    app.UseTokenVersionValidation();
+    
     app.UseAuthorization();
 
     app.MapControllers()

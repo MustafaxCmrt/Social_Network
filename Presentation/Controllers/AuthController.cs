@@ -354,7 +354,11 @@ public class AuthController : AppController
             await _unitOfWork.SaveChangesAsync();
 
             _logger.LogInformation("Email verified successfully for user {UserId}", user.Id);
-            return Ok(new { message = "Email adresiniz başarıyla doğrulandı! Artık giriş yapabilirsiniz." });
+            return Ok(new 
+            { 
+                message = "Email adresiniz başarıyla doğrulandı! Güvenlik nedeniyle lütfen tekrar giriş yapın.",
+                requiresRelogin = true 
+            });
         }
         catch (Exception ex)
         {

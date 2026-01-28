@@ -18,12 +18,18 @@ public class UserService : IUserService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogService _auditLogService;
     private readonly IEmailService _emailService;
+    private readonly ITokenCacheService _tokenCacheService;
 
-    public UserService(IUnitOfWork unitOfWork, IAuditLogService auditLogService, IEmailService emailService)
+    public UserService(
+        IUnitOfWork unitOfWork, 
+        IAuditLogService auditLogService, 
+        IEmailService emailService,
+        ITokenCacheService tokenCacheService)
     {
         _unitOfWork = unitOfWork;
         _auditLogService = auditLogService;
         _emailService = emailService;
+        _tokenCacheService = tokenCacheService;
     }
 
     /// <summary>
@@ -242,6 +248,9 @@ public class UserService : IUserService
             // 3. Güvenlik: Kullanıcının tüm aktif oturumlarını sonlandır
             user.RefreshTokenVersion++;
             
+            // Cache'i invalidate et - bir sonraki istekte DB'den çekilecek
+            _tokenCacheService.InvalidateUserTokenCache(userId);
+            
             // 4. Eski email'e bilgilendirme gönder
             try
             {
@@ -456,6 +465,9 @@ public class UserService : IUserService
             // 3. Güvenlik: Tüm aktif oturumları sonlandır (refresh token version'ı artır)
             user.RefreshTokenVersion++;
             
+            // Cache'i invalidate et - bir sonraki istekte DB'den çekilecek
+            _tokenCacheService.InvalidateUserTokenCache(userId);
+            
             // 4. Eski email'e bilgilendirme gönder (async, hata durumunda devam et)
             try
             {
@@ -515,6 +527,9 @@ public class UserService : IUserService
             
             // Şifre değiştiğinde refresh token versiyonunu artır (güvenlik)
             user.RefreshTokenVersion++;
+            
+            // Cache'i invalidate et
+            _tokenCacheService.InvalidateUserTokenCache(userId);
         }
 
         // 5. UpdatedAt ve UpdatedUserId güncelle

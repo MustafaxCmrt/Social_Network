@@ -29,7 +29,8 @@ public class ReportsConfiguration : IEntityTypeConfiguration<Reports>
         builder.Property(r => r.Status)
             .IsRequired()
             .HasConversion<int>() // Enum'u int olarak sakla
-            .HasDefaultValue(ReportStatus.Pending);
+            .HasDefaultValue(ReportStatus.Pending)
+            .HasSentinel((ReportStatus)0); // 0 değeri gelirse DB default'u kullan
 
         builder.Property(r => r.AdminNote)
             .HasMaxLength(500);

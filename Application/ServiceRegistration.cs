@@ -101,6 +101,9 @@ public static class ServiceRegistration
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        
+        // Token Cache Service - Singleton: Tüm uygulama boyunca tek instance
+        services.AddSingleton<ITokenCacheService, TokenCacheService>();
 
         return services;
     }

@@ -20,18 +20,22 @@ public class AuthService : IAuthService
     private readonly IJwtService _jwtService;
     private readonly IModerationService _moderationService;
     private readonly IEmailService _emailService;
+    private readonly ITokenCacheService _tokenCacheService;
     private readonly ILogger<AuthService> _logger;
+    
     public AuthService(
         IUnitOfWork unitOfWork, 
         IJwtService jwtService, 
         IModerationService moderationService,
         IEmailService emailService,
+        ITokenCacheService tokenCacheService,
         ILogger<AuthService> logger)
     {
         _unitOfWork = unitOfWork;
         _jwtService = jwtService;
         _moderationService = moderationService;
         _emailService = emailService;
+        _tokenCacheService = tokenCacheService;
         _logger = logger;
     }
 
@@ -163,7 +167,8 @@ public class AuthService : IAuthService
         if (!user.EmailVerified)
         {
             throw new UnauthorizedAccessException(
-                "Email adresiniz doğrulanmamış. Lütfen email kutunuzu kontrol edin ve doğrulama linkine tıklayın.");
+                "Email adresiniz doğrulanmamış. Lütfen email kutunuzu kontrol edin ve doğrulama linkine tıklayın. " +
+                "Not: Email adresiniz yönetici tarafından değiştirildi ise, yeni email adresinize gelen doğrulama linkine tıklamanız gerekmektedir.");
         }
 
         // 5. MODERASYON: Kullanıcı ban'lı mı kontrol et
@@ -184,8 +189,11 @@ public class AuthService : IAuthService
         user.LastLoginAt = DateTime.UtcNow;
         
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        
+        // 8. Cache'i invalidate et - yeni version için
+        _tokenCacheService.InvalidateUserTokenCache(user.Id);
 
-        // 8. JWT access token ve refresh token oluştur (aynı version ile)
+        // 9. JWT access token ve refresh token oluştur (aynı version ile)
         var accessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
         var refreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
         var expiresIn = _jwtService.GetTokenExpirationMinutes();
@@ -237,13 +245,16 @@ public class AuthService : IAuthService
         user.LastLoginAt = DateTime.UtcNow; // Refresh token kullanımı da aktif kullanım sayılır
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         
-        // 5. Yeni access token ve refresh token oluştur (yeni version ile)
+        // 5. Cache'i invalidate et - yeni version için
+        _tokenCacheService.InvalidateUserTokenCache(user.Id);
+        
+        // 6. Yeni access token ve refresh token oluştur (yeni version ile)
         var newAccessToken = _jwtService.GenerateAccessToken(user, user.RefreshTokenVersion);
         var newRefreshToken = _jwtService.GenerateRefreshToken(user, user.RefreshTokenVersion);
         var expiresIn = _jwtService.GetTokenExpirationMinutes();
         var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
         
-        // 6. Response DTO oluştur ve döndür
+        // 7. Response DTO oluştur ve döndür
         return new RefreshTokenResponseDto
         {
             AccessToken = newAccessToken,
@@ -276,7 +287,10 @@ public class AuthService : IAuthService
         user.RefreshTokenVersion++;
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         
-        // 3. Başarılı çıkış mesajı döndür
+        // 3. Cache'i invalidate et - eski version cache'de kalmasın
+        _tokenCacheService.InvalidateUserTokenCache(userId);
+        
+        // 4. Başarılı çıkış mesajı döndür
         return new LogoutResponseDto
         {
             Message = "Başarıyla çıkış yapıldı"

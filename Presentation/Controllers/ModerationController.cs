@@ -120,16 +120,22 @@ public class ModerationController : AppController
     }
 
     /// <summary>
-    /// Kullanıcının ban geçmişini getirir
+    /// Kullanıcının ban geçmişini getirir (sayfalanmış)
     /// </summary>
     /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="page">Sayfa numarası (default: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt sayısı (min: 10, max: 50, default: 10)</param>
     [HttpGet("user/{userId}/bans")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetUserBanHistory(int userId)
+    public async Task<IActionResult> GetUserBanHistory(int userId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
         try
         {
-            var bans = await _moderationService.GetUserBanHistoryAsync(userId);
+            if (page < 1) page = 1;
+            if (pageSize < 10) pageSize = 10;
+            if (pageSize > 50) pageSize = 50;
+
+            var bans = await _moderationService.GetUserBanHistoryAsync(userId, page, pageSize);
             return Ok(bans);
         }
         catch (Exception ex)
@@ -222,16 +228,22 @@ public class ModerationController : AppController
     }
 
     /// <summary>
-    /// Kullanıcının mute geçmişini getirir
+    /// Kullanıcının mute geçmişini getirir (sayfalanmış)
     /// </summary>
     /// <param name="userId">Kullanıcı ID'si</param>
+    /// <param name="page">Sayfa numarası (default: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt sayısı (min: 10, max: 50, default: 10)</param>
     [HttpGet("user/{userId}/mutes")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetUserMuteHistory(int userId)
+    public async Task<IActionResult> GetUserMuteHistory(int userId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
         try
         {
-            var mutes = await _moderationService.GetUserMuteHistoryAsync(userId);
+            if (page < 1) page = 1;
+            if (pageSize < 10) pageSize = 10;
+            if (pageSize > 50) pageSize = 50;
+
+            var mutes = await _moderationService.GetUserMuteHistoryAsync(userId, page, pageSize);
             return Ok(mutes);
         }
         catch (Exception ex)

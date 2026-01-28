@@ -347,6 +347,7 @@ public class UserService : IUserService
             ProfileImg = user.ProfileImg,
             Role = user.Role.ToString(),
             CreatedAt = user.CreatedAt,
+            IsActive = user.IsActive,
             TotalThreads = totalThreads,
             TotalPosts = totalPosts
         };

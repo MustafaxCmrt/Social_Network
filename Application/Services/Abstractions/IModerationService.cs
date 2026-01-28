@@ -1,3 +1,4 @@
+using Application.DTOs.Common;
 using Application.DTOs.Moderation;
 
 namespace Application.Services.Abstractions;
@@ -73,15 +74,19 @@ public interface IModerationService
     /// Kullanıcının ban geçmişini getirir
     /// </summary>
     /// <param name="userId">Kullanıcı ID'si</param>
-    /// <returns>Ban geçmişi listesi</returns>
-    Task<IEnumerable<UserBanDto>> GetUserBanHistoryAsync(int userId);
+    /// <param name="page">Sayfa numarası (default: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt sayısı (default: 20)</param>
+    /// <returns>Sayfalanmış ban geçmişi listesi</returns>
+    Task<PagedResultDto<UserBanDto>> GetUserBanHistoryAsync(int userId, int page = 1, int pageSize = 20);
 
     /// <summary>
     /// Kullanıcının mute geçmişini getirir
     /// </summary>
     /// <param name="userId">Kullanıcı ID'si</param>
-    /// <returns>Mute geçmişi listesi</returns>
-    Task<IEnumerable<UserMuteDto>> GetUserMuteHistoryAsync(int userId);
+    /// <param name="page">Sayfa numarası (default: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt sayısı (default: 20)</param>
+    /// <returns>Sayfalanmış mute geçmişi listesi</returns>
+    Task<PagedResultDto<UserMuteDto>> GetUserMuteHistoryAsync(int userId, int page = 1, int pageSize = 20);
 
     /// <summary>
     /// Kullanıcı adı veya isim-soyisme göre kullanıcı arar (Admin paneli için)

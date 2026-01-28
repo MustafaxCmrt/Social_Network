@@ -13,6 +13,7 @@ public class UserProfileDto
     public string? ProfileImg { get; set; }
     public string Role { get; set; } = null!;
     public DateTime CreatedAt { get; set; }
+    public bool IsActive { get; set; }
     
     /// <summary>
     /// Kullanıcının oluşturduğu toplam konu sayısı

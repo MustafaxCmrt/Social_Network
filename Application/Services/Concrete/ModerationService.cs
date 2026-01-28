@@ -1,3 +1,4 @@
+using Application.DTOs.Common;
 using Application.DTOs.Moderation;
 using Application.DTOs.AuditLog;
 using Application.DTOs.Search;
@@ -488,7 +489,7 @@ public class ModerationService : IModerationService
         return (true, muteDto);
     }
 
-    public async Task<IEnumerable<UserBanDto>> GetUserBanHistoryAsync(int userId)
+    public async Task<PagedResultDto<UserBanDto>> GetUserBanHistoryAsync(int userId, int page = 1, int pageSize = 20)
     {
         var bans = await _unitOfWork.UserBans.GetAllWithIncludesAsync(
             include: query => query
@@ -516,8 +517,13 @@ public class ModerationService : IModerationService
                 expiredBans.Count, userId);
         }
 
-        return userBans
+        var totalCount = userBans.Count;
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        var pagedBans = userBans
             .OrderByDescending(b => b.BannedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(b => new UserBanDto
             {
                 Id = b.Id,
@@ -529,10 +535,20 @@ public class ModerationService : IModerationService
                 BannedAt = b.BannedAt,
                 ExpiresAt = b.ExpiresAt,
                 IsActive = b.IsActive
-            });
+            })
+            .ToList();
+
+        return new PagedResultDto<UserBanDto>
+        {
+            Items = pagedBans,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 
-    public async Task<IEnumerable<UserMuteDto>> GetUserMuteHistoryAsync(int userId)
+    public async Task<PagedResultDto<UserMuteDto>> GetUserMuteHistoryAsync(int userId, int page = 1, int pageSize = 20)
     {
         var mutes = await _unitOfWork.UserMutes.GetAllWithIncludesAsync(
             include: query => query
@@ -560,8 +576,13 @@ public class ModerationService : IModerationService
                 expiredMutes.Count, userId);
         }
 
-        return userMutes
+        var totalCount = userMutes.Count;
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        var pagedMutes = userMutes
             .OrderByDescending(m => m.MutedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(m => new UserMuteDto
             {
                 Id = m.Id,
@@ -573,7 +594,17 @@ public class ModerationService : IModerationService
                 MutedAt = m.MutedAt,
                 ExpiresAt = m.ExpiresAt,
                 IsActive = m.IsActive
-            });
+            })
+            .ToList();
+
+        return new PagedResultDto<UserMuteDto>
+        {
+            Items = pagedMutes,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 
     public async Task<IEnumerable<SearchUserResultDto>> SearchUsersAsync(string searchTerm)

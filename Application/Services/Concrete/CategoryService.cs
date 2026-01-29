@@ -1,5 +1,6 @@
 using Application.DTOs.AuditLog;
 using Application.DTOs.Category;
+using Application.DTOs.Common;
 using Application.Services.Abstractions;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,87 @@ public class CategoryService : ICategoryService
             ParentCategoryId = c.ParentCategoryId,
             SubCategoryCount = c.SubCategories.Count
         });
+    }
+
+    public async Task<PagedResultDto<CategoryDto>> GetAllCategoriesPaginatedAsync(
+        int page = 1,
+        int pageSize = 10,
+        string? search = null,
+        int? parentCategoryId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 50) pageSize = 50; // Max 50 kategori per page
+
+        var query = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+            include: q => q
+                .Include(c => c.Threads)
+                .Include(c => c.SubCategories),
+            cancellationToken);
+
+        // Filtreleme
+        var filteredQuery = query.AsEnumerable();
+
+        // Arama
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            filteredQuery = filteredQuery.Where(c =>
+                c.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (c.Description != null && c.Description.Contains(search, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        // Parent Category filtreleme
+        if (parentCategoryId.HasValue)
+        {
+            if (parentCategoryId.Value == 0)
+            {
+                // 0 ise sadece ana kategorileri getir
+                filteredQuery = filteredQuery.Where(c => c.ParentCategoryId == null);
+            }
+            else
+            {
+                // Belirli bir kategorinin alt kategorilerini getir
+                filteredQuery = filteredQuery.Where(c => c.ParentCategoryId == parentCategoryId.Value);
+            }
+        }
+        else
+        {
+            // parentCategoryId null ise VARSAYILAN olarak sadece ana kategorileri getir
+            filteredQuery = filteredQuery.Where(c => c.ParentCategoryId == null);
+        }
+
+        var totalCount = filteredQuery.Count();
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        var categories = filteredQuery
+            .OrderByDescending(c => c.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(c => new CategoryDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Slug = c.Slug,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                CreatedUserId = c.CreatedUserId,
+                UpdatedUserId = c.UpdatedUserId,
+                ThreadCount = c.Threads.Count,
+                ParentCategoryId = c.ParentCategoryId,
+                SubCategoryCount = c.SubCategories.Count
+            })
+            .ToList();
+
+        return new PagedResultDto<CategoryDto>
+        {
+            Items = categories,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 
     public async Task<CategoryDto?> GetCategoryByIdAsync(int id, CancellationToken cancellationToken = default)

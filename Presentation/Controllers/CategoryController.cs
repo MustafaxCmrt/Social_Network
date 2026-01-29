@@ -20,12 +20,37 @@ public class CategoryController : AppController
     }
 
     // GET: api/Category
+    /// <summary>
+    /// Sadece ana kategorileri getirir (kategori listesi için - alt kategoriler hariç)
+    /// </summary>
     [HttpGet("getAll")]
     [AllowAnonymous]
     public async Task<IActionResult> GetAllCategories(CancellationToken cancellationToken)
     {
-        var categories = await _categoryService.GetAllCategoriesAsync(cancellationToken);
+        var categories = await _categoryService.GetRootCategoriesAsync(cancellationToken);
         return Ok(categories);
+    }
+
+    // GET: api/Category/paginated
+    /// <summary>
+    /// Kategorileri sayfalı olarak getirir (önerilen)
+    /// </summary>
+    /// <param name="page">Sayfa numarası (varsayılan: 1)</param>
+    /// <param name="pageSize">Sayfa başına kayıt (varsayılan: 10, max: 50)</param>
+    /// <param name="search">Kategori başlığı veya açıklamasında arama</param>
+    /// <param name="parentCategoryId">Üst kategori ID (null: sadece ana kategoriler, 0: sadece ana kategoriler, ID: o kategorinin alt kategorileri)</param>
+    [HttpGet("paginated")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetCategoriesPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] int? parentCategoryId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _categoryService.GetAllCategoriesPaginatedAsync(
+            page, pageSize, search, parentCategoryId, cancellationToken);
+        return Ok(result);
     }
 
     // GET: api/Category/5

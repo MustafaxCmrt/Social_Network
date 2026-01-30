@@ -24,6 +24,11 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<UserMutes>? _userMutes;
     private IRepository<PasswordResetTokens>? _passwordResetTokens;
     private IRepository<AuditLogs>? _auditLogs;
+    
+    // Kulüp sistemi
+    private IRepository<ClubRequests>? _clubRequests;
+    private IRepository<Clubs>? _clubs;
+    private IRepository<ClubMemberships>? _clubMemberships;
 
     public UnitOfWork(ApplicationDbContext context, ICurrentUserService? currentUserService)
     {
@@ -43,6 +48,11 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<UserMutes> UserMutes => _userMutes ??= new Repository<UserMutes>(_context);
     public IRepository<PasswordResetTokens> PasswordResetTokens => _passwordResetTokens ??= new Repository<PasswordResetTokens>(_context);
     public IRepository<AuditLogs> AuditLogs => _auditLogs ??= new Repository<AuditLogs>(_context);
+    
+    // Kulüp sistemi repository'leri
+    public IRepository<ClubRequests> ClubRequests => _clubRequests ??= new Repository<ClubRequests>(_context);
+    public IRepository<Clubs> Clubs => _clubs ??= new Repository<Clubs>(_context);
+    public IRepository<ClubMemberships> ClubMemberships => _clubMemberships ??= new Repository<ClubMemberships>(_context);
 
 
 

@@ -28,5 +28,52 @@ public enum NotificationType
     /// <summary>
     /// Yorum beğenildi (upvote)
     /// </summary>
-    PostUpvoted = 5
+    PostUpvoted = 5,
+    
+    // ==================== KULÜP BİLDİRİMLERİ ====================
+    
+    /// <summary>
+    /// Yeni kulüp açma başvurusu geldi (Moderatörlere)
+    /// </summary>
+    ClubRequestReceived = 10,
+    
+    /// <summary>
+    /// Kulüp başvurusu onaylandı (Başvurana)
+    /// </summary>
+    ClubRequestApproved = 11,
+    
+    /// <summary>
+    /// Kulüp başvurusu reddedildi (Başvurana)
+    /// </summary>
+    ClubRequestRejected = 12,
+    
+    /// <summary>
+    /// Kulübe üyelik başvurusu geldi (Kulüp yöneticilerine)
+    /// </summary>
+    ClubMembershipRequest = 13,
+    
+    /// <summary>
+    /// Kulüp üyelik başvurusu onaylandı (Başvurana)
+    /// </summary>
+    ClubMembershipApproved = 14,
+    
+    /// <summary>
+    /// Kulüp üyelik başvurusu reddedildi (Başvurana)
+    /// </summary>
+    ClubMembershipRejected = 15,
+    
+    /// <summary>
+    /// Kulüpten çıkarıldın (Üyeye)
+    /// </summary>
+    ClubMemberKicked = 16,
+    
+    /// <summary>
+    /// Kulüpte yeni thread açıldı (Üyelere)
+    /// </summary>
+    ClubNewThread = 17,
+    
+    /// <summary>
+    /// Kulüp rolün değişti (Üyeye)
+    /// </summary>
+    ClubRoleChanged = 18
 }

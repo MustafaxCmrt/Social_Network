@@ -45,6 +45,10 @@ public class ThreadsConfiguration : IEntityTypeConfiguration<Threads>
         builder.Property(t => t.CategoryId)
             .IsRequired();
 
+        // Kulüp ID - Nullable (null ise normal forum thread'i)
+        builder.Property(t => t.ClubId)
+            .IsRequired(false);
+
         // BaseEntity properties - Audit Trail
         builder.Property(t => t.CreatedAt)
             .IsRequired();
@@ -88,7 +92,12 @@ public class ThreadsConfiguration : IEntityTypeConfiguration<Threads>
         builder.HasIndex(t => t.CreatedAt)
             .HasDatabaseName("IX_Threads_CreatedAt");
 
+        // Kulüp thread'leri için index
+        builder.HasIndex(t => t.ClubId)
+            .HasDatabaseName("IX_Threads_ClubId");
+
         // Relationships - Foreign keys (UsersConfiguration ve CategoriesConfiguration'da tanımlandı)
+        // Club ilişkisi ClubsConfiguration'da tanımlandı
         builder.HasMany(t => t.Posts)
             .WithOne(p => p.Thread)
             .HasForeignKey(p => p.ThreadId)

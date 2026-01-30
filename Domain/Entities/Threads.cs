@@ -13,6 +13,11 @@ public class Threads : BaseEntity
     
     public int UserId { get; set; } // Foreign Key - Zorunlu
     public int CategoryId { get; set; } // Foreign Key - Zorunlu
+    
+    /// <summary>
+    /// Kulüp ID - Nullable (null ise normal forum thread'i, değilse kulüp thread'i)
+    /// </summary>
+    public int? ClubId { get; set; } // Foreign Key - Opsiyonel
 
     // NAVIGATION PROPERTIES (Nesne olarak erişim)
     // Kod yazarken thread.User.Email diyebilmen için:
@@ -20,6 +25,11 @@ public class Threads : BaseEntity
     
     // Kod yazarken thread.Category.Title diyebilmen için:
     public Categories Category { get; set; } = null!; // Navigation property - EF Core tarafından doldurulur
+    
+    /// <summary>
+    /// Thread'in ait olduğu kulüp (opsiyonel)
+    /// </summary>
+    public Clubs? Club { get; set; } // Navigation property - Kulüp thread'i ise doldurulur
 
     // Bir konunun altında birden fazla cevap (Post) olabilir:
     public ICollection<Posts> Posts { get; set; } = new List<Posts>();

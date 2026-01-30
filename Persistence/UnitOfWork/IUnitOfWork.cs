@@ -18,6 +18,11 @@ public interface IUnitOfWork : IDisposable
     IRepository<PasswordResetTokens> PasswordResetTokens { get; }
     IRepository<AuditLogs> AuditLogs { get; }
     
+    // Kulüp sistemi repository'leri
+    IRepository<ClubRequests> ClubRequests { get; }
+    IRepository<Clubs> Clubs { get; }
+    IRepository<ClubMemberships> ClubMemberships { get; }
+    
     // Transaction yönetimi
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task BeginTransactionAsync(CancellationToken cancellationToken = default);

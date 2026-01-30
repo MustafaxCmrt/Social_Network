@@ -28,6 +28,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<PasswordResetTokens> PasswordResetTokens { get; set; }
     public DbSet<AuditLogs> AuditLogs { get; set; }
     
+    // Kulüp sistemi
+    public DbSet<ClubRequests> ClubRequests { get; set; }
+    public DbSet<Clubs> Clubs { get; set; }
+    public DbSet<ClubMemberships> ClubMemberships { get; set; }
+    
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -47,6 +52,11 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<UserMutes>().HasQueryFilter(um => !um.IsDeleted);
         modelBuilder.Entity<PasswordResetTokens>().HasQueryFilter(prt => !prt.IsDeleted);
         modelBuilder.Entity<AuditLogs>().HasQueryFilter(al => !al.IsDeleted);
+        
+        // Kulüp sistemi query filters
+        modelBuilder.Entity<ClubRequests>().HasQueryFilter(cr => !cr.IsDeleted);
+        modelBuilder.Entity<Clubs>().HasQueryFilter(c => !c.IsDeleted);
+        modelBuilder.Entity<ClubMemberships>().HasQueryFilter(cm => !cm.IsDeleted);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

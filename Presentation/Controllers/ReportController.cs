@@ -50,7 +50,7 @@ public class ReportController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var userId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized("Kullanıcı doğrulaması başarısız.");
         }
 
         try
@@ -67,7 +67,7 @@ public class ReportController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating report for user {UserId}", userId);
-            return StatusCode(500, "An error occurred while creating the report.");
+            return StatusCode(500, "Rapor oluşturulurken bir hata oluştu.");
         }
     }
 
@@ -84,7 +84,7 @@ public class ReportController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var userId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized("Kullanıcı doğrulaması başarısız.");
         }
 
         try
@@ -95,7 +95,7 @@ public class ReportController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting reports for user {UserId}", userId);
-            return StatusCode(500, "An error occurred while retrieving reports.");
+            return StatusCode(500, "Raporlar getirilirken bir hata oluştu.");
         }
     }
 
@@ -121,7 +121,7 @@ public class ReportController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting all reports");
-            return StatusCode(500, "An error occurred while retrieving reports.");
+            return StatusCode(500, "Raporlar getirilirken bir hata oluştu.");
         }
     }
 
@@ -137,7 +137,7 @@ public class ReportController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var userId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized("Kullanıcı doğrulaması başarısız.");
         }
 
         try
@@ -158,7 +158,7 @@ public class ReportController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting report {ReportId}", id);
-            return StatusCode(500, "An error occurred while retrieving the report.");
+            return StatusCode(500, "Rapor getirilirken bir hata oluştu.");
         }
     }
 
@@ -182,7 +182,7 @@ public class ReportController : AppController
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var userId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized("Kullanıcı doğrulaması başarısız.");
         }
 
         try
@@ -205,7 +205,7 @@ public class ReportController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating status for report {ReportId}", id);
-            return StatusCode(500, "An error occurred while updating the report status.");
+            return StatusCode(500, "Rapor durumu güncellenirken bir hata oluştu.");
         }
     }
 
@@ -214,14 +214,14 @@ public class ReportController : AppController
     /// </summary>
     /// <param name="id">Rapor ID'si</param>
     /// <returns>Başarılı ise true</returns>
-    [HttpDelete("{id}")]
+    [HttpDelete("delete/{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteReport(int id)
     {
         var currentUserIdClaim = User.FindFirst("UserId")?.Value;
         if (string.IsNullOrEmpty(currentUserIdClaim) || !int.TryParse(currentUserIdClaim, out var userId))
         {
-            return Unauthorized("User not authenticated.");
+            return Unauthorized("Kullanıcı doğrulaması başarısız.");
         }
 
         try
@@ -230,10 +230,10 @@ public class ReportController : AppController
             if (result)
             {
                 _logger.LogInformation("Report {ReportId} deleted by admin {AdminId}", id, userId);
-                return Ok(new { message = "Report deleted successfully." });
+                return Ok(new { message = "Rapor başarıyla silindi." });
             }
 
-            return BadRequest("Failed to delete report.");
+            return BadRequest("Rapor silinirken bir hata oluştu.");
         }
         catch (InvalidOperationException ex)
         {
@@ -248,7 +248,7 @@ public class ReportController : AppController
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting report {ReportId}", id);
-            return StatusCode(500, "An error occurred while deleting the report.");
+            return StatusCode(500, "Rapor silinirken bir hata oluştu.");
         }
     }
 }

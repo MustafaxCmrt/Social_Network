@@ -314,14 +314,43 @@ public class ClubService : IClubService
         };
     }
 
-    public async Task<ClubDto?> GetClubByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<ClubDto?> GetClubByIdentifierAsync(string identifier, CancellationToken cancellationToken = default)
     {
-        var club = await _unitOfWork.Clubs.GetByIdAsync(id, cancellationToken);
+        Clubs? club;
+
+        if (int.TryParse(identifier, out var id))
+            club = await _unitOfWork.Clubs.GetByIdAsync(id, cancellationToken);
+        else
+            club = await _unitOfWork.Clubs.FirstOrDefaultAsync(c => c.Slug == identifier, cancellationToken);
 
         if (club == null)
             return null;
 
         var founder = await _unitOfWork.Users.GetByIdAsync(club.FounderId, cancellationToken);
+
+        // Giriş yapmış kullanıcının üyelik durumunu ekle
+        var userId = _currentUserService.GetCurrentUserId();
+        bool? isMember = null;
+        ClubRole? currentUserRole = null;
+        MembershipStatus? currentUserStatus = null;
+
+        if (userId != null)
+        {
+            var membership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
+                m => m.ClubId == club.Id && m.UserId == userId,
+                cancellationToken);
+
+            if (membership != null)
+            {
+                isMember = membership.Status == MembershipStatus.Approved;
+                currentUserRole = membership.Role;
+                currentUserStatus = membership.Status;
+            }
+            else
+            {
+                isMember = false;
+            }
+        }
 
         return new ClubDto(
             club.Id,
@@ -335,36 +364,14 @@ public class ClubService : IClubService
             club.MemberCount,
             club.FounderId,
             founder?.Username ?? "Bilinmiyor",
-            club.CreatedAt
+            club.CreatedAt,
+            isMember,
+            currentUserRole,
+            currentUserStatus
         );
     }
 
-    public async Task<ClubDto?> GetClubBySlugAsync(string slug, CancellationToken cancellationToken = default)
-    {
-        var club = await _unitOfWork.Clubs.FirstOrDefaultAsync(c => c.Slug == slug, cancellationToken);
-
-        if (club == null)
-            return null;
-
-        var founder = await _unitOfWork.Users.GetByIdAsync(club.FounderId, cancellationToken);
-
-        return new ClubDto(
-            club.Id,
-            club.Name,
-            club.Slug,
-            club.Description,
-            club.LogoUrl,
-            club.BannerUrl,
-            club.IsPublic,
-            club.RequiresApproval,
-            club.MemberCount,
-            club.FounderId,
-            founder?.Username ?? "Bilinmiyor",
-            club.CreatedAt
-        );
-    }
-
-    public async Task<ClubDto> UpdateClubAsync(UpdateClubDto dto, CancellationToken cancellationToken = default)
+    public async Task<ClubDto?> UpdateClubAsync(UpdateClubDto dto, CancellationToken cancellationToken = default)
     {
         var userId = _currentUserService.GetCurrentUserId()
             ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
@@ -431,7 +438,7 @@ public class ClubService : IClubService
         return true;
     }
 
-    public async Task<string> UploadClubLogoAsync(int clubId, string imageUrl, CancellationToken cancellationToken = default)
+    public async Task<string?> UploadClubImageAsync(int clubId, string imageUrl, string imageType, CancellationToken cancellationToken = default)
     {
         var userId = _currentUserService.GetCurrentUserId()
             ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
@@ -447,30 +454,13 @@ public class ClubService : IClubService
         if (membership == null || membership.Role != ClubRole.President)
             throw new UnauthorizedAccessException("Bu işlem için başkan yetkisi gerekiyor");
 
-        club.LogoUrl = imageUrl;
-        _unitOfWork.Clubs.Update(club);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (imageType == "logo")
+            club.LogoUrl = imageUrl;
+        else if (imageType == "banner")
+            club.BannerUrl = imageUrl;
+        else
+            throw new InvalidOperationException("Geçersiz resim tipi. 'logo' veya 'banner' olmalıdır");
 
-        return imageUrl;
-    }
-
-    public async Task<string> UploadClubBannerAsync(int clubId, string imageUrl, CancellationToken cancellationToken = default)
-    {
-        var userId = _currentUserService.GetCurrentUserId()
-            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
-
-        var club = await _unitOfWork.Clubs.GetByIdAsync(clubId, cancellationToken);
-        if (club == null)
-            throw new KeyNotFoundException("Kulüp bulunamadı");
-
-        var membership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == clubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
-            cancellationToken);
-
-        if (membership == null || membership.Role != ClubRole.President)
-            throw new UnauthorizedAccessException("Bu işlem için başkan yetkisi gerekiyor");
-
-        club.BannerUrl = imageUrl;
         _unitOfWork.Clubs.Update(club);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -522,7 +512,7 @@ public class ClubService : IClubService
             var currentCount = await _unitOfWork.ClubMemberships.CountAsync(
                 m => m.ClubId == dto.ClubId && m.Status == MembershipStatus.Approved,
                 cancellationToken);
-            club.MemberCount = currentCount + 1; // +1 çünkü yeni üyelik henüz save edilmedi
+            club.MemberCount = currentCount + 1;
             _unitOfWork.Clubs.Update(club);
         }
 
@@ -598,10 +588,30 @@ public class ClubService : IClubService
         return true;
     }
 
-    public async Task<PagedResultDto<ClubMemberDto>> GetClubMembersAsync(int clubId, int page, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<PagedResultDto<ClubMemberDto>> GetClubMembersAsync(int clubId, int page, int pageSize, MembershipStatus? status = null, CancellationToken cancellationToken = default)
     {
+        // Varsayılan olarak onaylı üyeleri getir
+        var filterStatus = status ?? MembershipStatus.Approved;
+
+        // Bekleyen üyeleri görmek için yönetici yetkisi gerekir
+        if (filterStatus == MembershipStatus.Pending)
+        {
+            var userId = _currentUserService.GetCurrentUserId()
+                ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
+
+            var userMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
+                m => m.ClubId == clubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
+                cancellationToken);
+
+            if (userMembership == null ||
+                (userMembership.Role != ClubRole.President &&
+                 userMembership.Role != ClubRole.VicePresident &&
+                 userMembership.Role != ClubRole.Officer))
+                throw new UnauthorizedAccessException("Bu işlem için yönetici yetkisi gerekiyor");
+        }
+
         var (memberships, totalCount) = await _unitOfWork.ClubMemberships.FindPagedAsync(
-            predicate: m => m.ClubId == clubId && m.Status == MembershipStatus.Approved,
+            predicate: m => m.ClubId == clubId && m.Status == filterStatus,
             include: query => query.Include(m => m.User),
             orderBy: q => q.OrderByDescending(m => m.Role).ThenBy(m => m.JoinedAt),
             page: page,
@@ -631,118 +641,119 @@ public class ClubService : IClubService
         };
     }
 
-    public async Task<PagedResultDto<ClubMemberDto>> GetPendingMembersAsync(int clubId, int page, int pageSize, CancellationToken cancellationToken = default)
-    {
-        var userId = _currentUserService.GetCurrentUserId()
-            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
-
-        // Kulüp yöneticisi mi kontrol et
-        var userMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == clubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
-            cancellationToken);
-
-        if (userMembership == null ||
-            (userMembership.Role != ClubRole.President &&
-             userMembership.Role != ClubRole.VicePresident &&
-             userMembership.Role != ClubRole.Officer))
-            throw new UnauthorizedAccessException("Bu işlem için yönetici yetkisi gerekiyor");
-
-        var (memberships, totalCount) = await _unitOfWork.ClubMemberships.FindPagedAsync(
-            predicate: m => m.ClubId == clubId && m.Status == MembershipStatus.Pending,
-            include: query => query.Include(m => m.User),
-            orderBy: q => q.OrderBy(m => m.CreatedAt),
-            page: page,
-            pageSize: pageSize,
-            cancellationToken);
-
-        var items = memberships.Select(m => new ClubMemberDto(
-            m.Id,
-            m.UserId,
-            m.User.Username,
-            m.User.FirstName,
-            m.User.LastName,
-            m.User.ProfileImg,
-            m.Role,
-            m.Status,
-            m.JoinedAt,
-            m.JoinNote
-        )).ToList();
-
-        return new PagedResultDto<ClubMemberDto>
-        {
-            Items = items,
-            Page = page,
-            PageSize = pageSize,
-            TotalCount = totalCount,
-            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
-        };
-    }
-
-    public async Task<ClubMemberDto> ProcessMembershipAsync(ProcessMembershipDto dto, CancellationToken cancellationToken = default)
+    public async Task<ClubMemberDto?> ProcessMembershipAsync(ProcessMembershipDto dto, CancellationToken cancellationToken = default)
     {
         var userId = _currentUserService.GetCurrentUserId()
             ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
 
         var membership = await _unitOfWork.ClubMemberships.GetByIdAsync(dto.MembershipId, cancellationToken);
         if (membership == null)
-            throw new KeyNotFoundException("Üyelik başvurusu bulunamadı");
+            throw new KeyNotFoundException("Üyelik bulunamadı");
 
-        if (membership.Status != MembershipStatus.Pending)
-            throw new InvalidOperationException("Bu başvuru zaten işlenmiş");
-
-        // Kulüp yöneticisi mi kontrol et
-        var userMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == membership.ClubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
-            cancellationToken);
-
-        if (userMembership == null ||
-            (userMembership.Role != ClubRole.President &&
-             userMembership.Role != ClubRole.VicePresident &&
-             userMembership.Role != ClubRole.Officer))
-            throw new UnauthorizedAccessException("Bu işlem için yönetici yetkisi gerekiyor");
-
-        membership.Status = dto.Approve ? MembershipStatus.Approved : MembershipStatus.Rejected;
-        membership.JoinedAt = dto.Approve ? DateTime.UtcNow : null;
-
-        _unitOfWork.ClubMemberships.Update(membership);
-
-        // Onaylandıysa üye sayısını güncelle
-        if (dto.Approve)
+        // Kick işlemi için üyelik Approved olmalı, diğerleri için Pending
+        if (dto.Action == MembershipAction.Kick)
         {
+            if (membership.Status != MembershipStatus.Approved)
+                throw new InvalidOperationException("Sadece aktif üyeler çıkarılabilir");
+
+            if (membership.Role == ClubRole.President)
+                throw new InvalidOperationException("Başkan çıkarılamaz");
+
+            // Kick için başkan veya yardımcı başkan yetkisi gerekir
+            var kickerMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
+                m => m.ClubId == membership.ClubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
+                cancellationToken);
+
+            if (kickerMembership == null ||
+                (kickerMembership.Role != ClubRole.President && kickerMembership.Role != ClubRole.VicePresident))
+                throw new UnauthorizedAccessException("Bu işlem için başkan veya yardımcı başkan yetkisi gerekiyor");
+
+            membership.Status = MembershipStatus.Kicked;
+            _unitOfWork.ClubMemberships.Update(membership);
+
+            // Üye sayısını güncelle
             var club = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
             if (club != null)
             {
                 var currentCount = await _unitOfWork.ClubMemberships.CountAsync(
-                    m => m.ClubId == membership.ClubId && m.Status == MembershipStatus.Approved,
+                    m => m.ClubId == membership.ClubId && m.Status == MembershipStatus.Approved && m.Id != membership.Id,
                     cancellationToken);
-                club.MemberCount = currentCount + 1; // +1 çünkü status henüz save edilmedi
+                club.MemberCount = currentCount;
                 _unitOfWork.Clubs.Update(club);
             }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Bildirim gönder
+            await _notificationService.CreateNotificationAsync(new CreateNotificationDto
+            {
+                UserId = membership.UserId,
+                ActorUserId = userId,
+                Type = NotificationType.ClubMemberKicked,
+                Message = $"{club?.Name} kulübünden çıkarıldınız"
+            }, cancellationToken);
+        }
+        else
+        {
+            // Approve/Reject için üyelik Pending olmalı
+            if (membership.Status != MembershipStatus.Pending)
+                throw new InvalidOperationException("Bu başvuru zaten işlenmiş");
+
+            // Kulüp yöneticisi mi kontrol et
+            var userMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
+                m => m.ClubId == membership.ClubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
+                cancellationToken);
+
+            if (userMembership == null ||
+                (userMembership.Role != ClubRole.President &&
+                 userMembership.Role != ClubRole.VicePresident &&
+                 userMembership.Role != ClubRole.Officer))
+                throw new UnauthorizedAccessException("Bu işlem için yönetici yetkisi gerekiyor");
+
+            var isApprove = dto.Action == MembershipAction.Approve;
+            membership.Status = isApprove ? MembershipStatus.Approved : MembershipStatus.Rejected;
+            membership.JoinedAt = isApprove ? DateTime.UtcNow : null;
+
+            _unitOfWork.ClubMemberships.Update(membership);
+
+            // Onaylandıysa üye sayısını güncelle
+            if (isApprove)
+            {
+                var club = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
+                if (club != null)
+                {
+                    var currentCount = await _unitOfWork.ClubMemberships.CountAsync(
+                        m => m.ClubId == membership.ClubId && m.Status == MembershipStatus.Approved,
+                        cancellationToken);
+                    club.MemberCount = currentCount + 1;
+                    _unitOfWork.Clubs.Update(club);
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Başvurana bildirim gönder
+            var notifClub = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
+            await _notificationService.CreateNotificationAsync(new CreateNotificationDto
+            {
+                UserId = membership.UserId,
+                ActorUserId = userId,
+                Type = isApprove ? NotificationType.ClubMembershipApproved : NotificationType.ClubMembershipRejected,
+                Message = isApprove
+                    ? $"{notifClub?.Name} kulübüne katılma başvurunuz onaylandı!"
+                    : $"{notifClub?.Name} kulübüne katılma başvurunuz reddedildi"
+            }, cancellationToken);
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Başvurana bildirim gönder
-        var club2 = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
-        await _notificationService.CreateNotificationAsync(new CreateNotificationDto
-        {
-            UserId = membership.UserId,
-            ActorUserId = userId,
-            Type = dto.Approve ? NotificationType.ClubMembershipApproved : NotificationType.ClubMembershipRejected,
-            Message = dto.Approve
-                ? $"{club2?.Name} kulübüne katılma başvurunuz onaylandı!"
-                : $"{club2?.Name} kulübüne katılma başvurunuz reddedildi"
-        }, cancellationToken);
-
-        var user = await _unitOfWork.Users.GetByIdAsync(membership.UserId, cancellationToken);
+        var memberUser = await _unitOfWork.Users.GetByIdAsync(membership.UserId, cancellationToken);
 
         return new ClubMemberDto(
             membership.Id,
             membership.UserId,
-            user?.Username ?? "Bilinmiyor",
-            user?.FirstName ?? "Bilinmiyor",
-            user?.LastName ?? "",
-            user?.ProfileImg,
+            memberUser?.Username ?? "Bilinmiyor",
+            memberUser?.FirstName ?? "Bilinmiyor",
+            memberUser?.LastName ?? "",
+            memberUser?.ProfileImg,
             membership.Role,
             membership.Status,
             membership.JoinedAt,
@@ -750,7 +761,7 @@ public class ClubService : IClubService
         );
     }
 
-    public async Task<ClubMemberDto> UpdateMemberRoleAsync(UpdateMemberRoleDto dto, CancellationToken cancellationToken = default)
+    public async Task<ClubMemberDto?> UpdateMemberRoleAsync(UpdateMemberRoleDto dto, CancellationToken cancellationToken = default)
     {
         var userId = _currentUserService.GetCurrentUserId()
             ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
@@ -770,22 +781,40 @@ public class ClubService : IClubService
         if (membership.Role == ClubRole.President)
             throw new InvalidOperationException("Başkanın rolü değiştirilemez");
 
+        // Başkanlık devri
         if (dto.NewRole == ClubRole.President)
-            throw new InvalidOperationException("Başkanlık bu yöntemle devredilemez. TransferPresidency kullanın");
-
-        membership.Role = dto.NewRole;
-        _unitOfWork.ClubMemberships.Update(membership);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Bildirim gönder
-        var club = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
-        await _notificationService.CreateNotificationAsync(new CreateNotificationDto
         {
-            UserId = membership.UserId,
-            ActorUserId = userId,
-            Type = NotificationType.ClubRoleChanged,
-            Message = $"{club?.Name} kulübündeki rolünüz {dto.NewRole} olarak değiştirildi"
-        }, cancellationToken);
+            userMembership.Role = ClubRole.Member;
+            membership.Role = ClubRole.President;
+
+            _unitOfWork.ClubMemberships.Update(userMembership);
+            _unitOfWork.ClubMemberships.Update(membership);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var club = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
+            await _notificationService.CreateNotificationAsync(new CreateNotificationDto
+            {
+                UserId = membership.UserId,
+                ActorUserId = userId,
+                Type = NotificationType.ClubPresidencyTransferred,
+                Message = $"{club?.Name} kulübünün yeni başkanı oldunuz!"
+            }, cancellationToken);
+        }
+        else
+        {
+            membership.Role = dto.NewRole;
+            _unitOfWork.ClubMemberships.Update(membership);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var club = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
+            await _notificationService.CreateNotificationAsync(new CreateNotificationDto
+            {
+                UserId = membership.UserId,
+                ActorUserId = userId,
+                Type = NotificationType.ClubRoleChanged,
+                Message = $"{club?.Name} kulübündeki rolünüz {dto.NewRole} olarak değiştirildi"
+            }, cancellationToken);
+        }
 
         var user = await _unitOfWork.Users.GetByIdAsync(membership.UserId, cancellationToken);
 
@@ -800,130 +829,6 @@ public class ClubService : IClubService
             membership.Status,
             membership.JoinedAt,
             membership.JoinNote
-        );
-    }
-
-    public async Task<bool> KickMemberAsync(KickMemberDto dto, CancellationToken cancellationToken = default)
-    {
-        var userId = _currentUserService.GetCurrentUserId()
-            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
-
-        var membership = await _unitOfWork.ClubMemberships.GetByIdAsync(dto.MembershipId, cancellationToken);
-        if (membership == null)
-            throw new KeyNotFoundException("Üyelik bulunamadı");
-
-        // Sadece başkan ve yardımcı başkan üye çıkarabilir
-        var userMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == membership.ClubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
-            cancellationToken);
-
-        if (userMembership == null ||
-            (userMembership.Role != ClubRole.President && userMembership.Role != ClubRole.VicePresident))
-            throw new UnauthorizedAccessException("Bu işlem için başkan veya yardımcı başkan yetkisi gerekiyor");
-
-        if (membership.Role == ClubRole.President)
-            throw new InvalidOperationException("Başkan çıkarılamaz");
-
-        membership.Status = MembershipStatus.Kicked;
-        _unitOfWork.ClubMemberships.Update(membership);
-
-        var club = await _unitOfWork.Clubs.GetByIdAsync(membership.ClubId, cancellationToken);
-        if (club != null)
-        {
-            var currentCount = await _unitOfWork.ClubMemberships.CountAsync(
-                m => m.ClubId == membership.ClubId && m.Status == MembershipStatus.Approved && m.Id != membership.Id,
-                cancellationToken);
-            club.MemberCount = currentCount;
-            _unitOfWork.Clubs.Update(club);
-        }
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Bildirim gönder
-        await _notificationService.CreateNotificationAsync(new CreateNotificationDto
-        {
-            UserId = membership.UserId,
-            ActorUserId = userId,
-            Type = NotificationType.ClubMemberKicked,
-            Message = $"{club?.Name} kulübünden çıkarıldınız"
-        }, cancellationToken);
-
-        return true;
-    }
-
-    public async Task<bool> TransferPresidencyAsync(int clubId, int newPresidentUserId, CancellationToken cancellationToken = default)
-    {
-        var userId = _currentUserService.GetCurrentUserId()
-            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
-
-        // Mevcut başkanın üyeliği
-        var currentPresidentMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == clubId && m.UserId == userId && m.Status == MembershipStatus.Approved,
-            cancellationToken);
-
-        if (currentPresidentMembership == null || currentPresidentMembership.Role != ClubRole.President)
-            throw new UnauthorizedAccessException("Bu işlem için başkan olmanız gerekiyor");
-
-        // Yeni başkanın üyeliği
-        var newPresidentMembership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == clubId && m.UserId == newPresidentUserId && m.Status == MembershipStatus.Approved,
-            cancellationToken);
-
-        if (newPresidentMembership == null)
-            throw new InvalidOperationException("Yeni başkan bu kulübün üyesi değil");
-
-        // Rolleri değiştir
-        currentPresidentMembership.Role = ClubRole.Member;
-        newPresidentMembership.Role = ClubRole.President;
-
-        _unitOfWork.ClubMemberships.Update(currentPresidentMembership);
-        _unitOfWork.ClubMemberships.Update(newPresidentMembership);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Bildirim gönder
-        var club = await _unitOfWork.Clubs.GetByIdAsync(clubId, cancellationToken);
-        await _notificationService.CreateNotificationAsync(new CreateNotificationDto
-        {
-            UserId = newPresidentUserId,
-            ActorUserId = userId,
-            Type = NotificationType.ClubPresidencyTransferred,
-            Message = $"{club?.Name} kulübünün yeni başkanı oldunuz!"
-        }, cancellationToken);
-
-        return true;
-    }
-
-    public async Task<MembershipStatusDto> GetMembershipStatusAsync(int clubId, CancellationToken cancellationToken = default)
-    {
-        var userId = _currentUserService.GetCurrentUserId();
-
-        if (userId == null)
-        {
-            return new MembershipStatusDto(
-                false,
-                null,
-                null
-            );
-        }
-
-        var membership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
-            m => m.ClubId == clubId && m.UserId == userId,
-            cancellationToken);
-
-        if (membership == null)
-        {
-            return new MembershipStatusDto(
-                false,
-                null,
-                null
-            );
-        }
-
-        return new MembershipStatusDto(
-            membership.Status == MembershipStatus.Approved,
-            membership.Role,
-            membership.Status
         );
     }
 

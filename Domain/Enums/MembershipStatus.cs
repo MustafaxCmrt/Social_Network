@@ -30,3 +30,13 @@ public enum MembershipStatus
     /// </summary>
     Kicked = 4
 }
+
+/// <summary>
+/// Üyelik işlem türleri (onay/red/çıkarma)
+/// </summary>
+public enum MembershipAction
+{
+    Approve = 0,
+    Reject = 1,
+    Kick = 2
+}

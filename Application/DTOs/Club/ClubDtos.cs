@@ -53,7 +53,10 @@ public record ClubDto(
     int MemberCount,
     int FounderId,
     string FounderUsername,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    bool? IsMember = null,
+    ClubRole? CurrentUserRole = null,
+    MembershipStatus? CurrentUserStatus = null
 );
 
 /// <summary>

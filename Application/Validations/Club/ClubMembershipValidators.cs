@@ -1,5 +1,4 @@
 using Application.DTOs.Club;
-using Domain.Enums;
 using FluentValidation;
 
 namespace Application.Validations.Club;
@@ -21,7 +20,7 @@ public class JoinClubValidator : AbstractValidator<JoinClubDto>
 }
 
 /// <summary>
-/// Üyelik başvurusu işleme validasyonu
+/// Üyelik başvurusu işleme validasyonu (onay/red/çıkarma)
 /// </summary>
 public class ProcessMembershipValidator : AbstractValidator<ProcessMembershipDto>
 {
@@ -29,11 +28,14 @@ public class ProcessMembershipValidator : AbstractValidator<ProcessMembershipDto
     {
         RuleFor(x => x.MembershipId)
             .GreaterThan(0).WithMessage("Geçerli bir üyelik ID'si gereklidir");
+
+        RuleFor(x => x.Action)
+            .IsInEnum().WithMessage("Geçerli bir işlem seçmelisiniz (Approve, Reject, Kick)");
     }
 }
 
 /// <summary>
-/// Üye rol değiştirme validasyonu
+/// Üye rol değiştirme validasyonu (başkanlık devri dahil)
 /// </summary>
 public class UpdateMemberRoleValidator : AbstractValidator<UpdateMemberRoleDto>
 {
@@ -43,20 +45,6 @@ public class UpdateMemberRoleValidator : AbstractValidator<UpdateMemberRoleDto>
             .GreaterThan(0).WithMessage("Geçerli bir üyelik ID'si gereklidir");
 
         RuleFor(x => x.NewRole)
-            .IsInEnum().WithMessage("Geçerli bir rol seçmelisiniz")
-            .Must(role => role != ClubRole.President)
-            .WithMessage("Başkanlık bu şekilde devredilemez. Başkanlık devri için özel endpoint kullanın.");
-    }
-}
-
-/// <summary>
-/// Üye çıkarma validasyonu
-/// </summary>
-public class KickMemberValidator : AbstractValidator<KickMemberDto>
-{
-    public KickMemberValidator()
-    {
-        RuleFor(x => x.MembershipId)
-            .GreaterThan(0).WithMessage("Geçerli bir üyelik ID'si gereklidir");
+            .IsInEnum().WithMessage("Geçerli bir rol seçmelisiniz");
     }
 }

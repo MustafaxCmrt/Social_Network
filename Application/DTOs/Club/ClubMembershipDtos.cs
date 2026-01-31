@@ -27,33 +27,17 @@ public record ClubMemberDto(
 );
 
 /// <summary>
-/// Üyelik başvurusunu işleme DTO (onay/red)
+/// Üyelik başvurusunu işleme DTO (onay/red/çıkarma)
 /// </summary>
 public record ProcessMembershipDto(
     int MembershipId,
-    bool Approve
+    MembershipAction Action
 );
 
 /// <summary>
-/// Üye rolünü değiştirme DTO
+/// Üye rolünü değiştirme DTO (Başkan ataması dahil)
 /// </summary>
 public record UpdateMemberRoleDto(
     int MembershipId,
     ClubRole NewRole
-);
-
-/// <summary>
-/// Üyeyi kulüpten çıkarma DTO
-/// </summary>
-public record KickMemberDto(
-    int MembershipId
-);
-
-/// <summary>
-/// Üyelik durumu kontrolü için response DTO
-/// </summary>
-public record MembershipStatusDto(
-    bool IsMember,
-    ClubRole? Role,
-    MembershipStatus? Status
 );

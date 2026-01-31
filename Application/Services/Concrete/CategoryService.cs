@@ -57,69 +57,48 @@ public class CategoryService : ICategoryService
         if (pageSize < 1) pageSize = 10;
         if (pageSize > 50) pageSize = 50; // Max 50 kategori per page
 
-        var query = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLower();
+
+        var (categories, totalCount) = await _unitOfWork.Categories.FindPagedAsync(
+            predicate: c =>
+                (normalizedSearch == null
+                 || c.Title.ToLower().Contains(normalizedSearch)
+                 || (c.Description != null && c.Description.ToLower().Contains(normalizedSearch)))
+                && (
+                    parentCategoryId.HasValue
+                        ? (parentCategoryId.Value == 0
+                            ? c.ParentCategoryId == null
+                            : c.ParentCategoryId == parentCategoryId.Value)
+                        : c.ParentCategoryId == null
+                ),
             include: q => q
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
-            cancellationToken);
+            orderBy: q => q.OrderByDescending(c => c.CreatedAt),
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
 
-        // Filtreleme
-        var filteredQuery = query.AsEnumerable();
-
-        // Arama
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            filteredQuery = filteredQuery.Where(c =>
-                c.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                (c.Description != null && c.Description.Contains(search, StringComparison.OrdinalIgnoreCase)));
-        }
-
-        // Parent Category filtreleme
-        if (parentCategoryId.HasValue)
-        {
-            if (parentCategoryId.Value == 0)
-            {
-                // 0 ise sadece ana kategorileri getir
-                filteredQuery = filteredQuery.Where(c => c.ParentCategoryId == null);
-            }
-            else
-            {
-                // Belirli bir kategorinin alt kategorilerini getir
-                filteredQuery = filteredQuery.Where(c => c.ParentCategoryId == parentCategoryId.Value);
-            }
-        }
-        else
-        {
-            // parentCategoryId null ise VARSAYILAN olarak sadece ana kategorileri getir
-            filteredQuery = filteredQuery.Where(c => c.ParentCategoryId == null);
-        }
-
-        var totalCount = filteredQuery.Count();
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        var categories = filteredQuery
-            .OrderByDescending(c => c.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(c => new CategoryDto
-            {
-                Id = c.Id,
-                Title = c.Title,
-                Slug = c.Slug,
-                Description = c.Description,
-                CreatedAt = c.CreatedAt,
-                UpdatedAt = c.UpdatedAt,
-                CreatedUserId = c.CreatedUserId,
-                UpdatedUserId = c.UpdatedUserId,
-                ThreadCount = c.Threads.Count,
-                ParentCategoryId = c.ParentCategoryId,
-                SubCategoryCount = c.SubCategories.Count
-            })
-            .ToList();
+        var items = categories.Select(c => new CategoryDto
+        {
+            Id = c.Id,
+            Title = c.Title,
+            Slug = c.Slug,
+            Description = c.Description,
+            CreatedAt = c.CreatedAt,
+            UpdatedAt = c.UpdatedAt,
+            CreatedUserId = c.CreatedUserId,
+            UpdatedUserId = c.UpdatedUserId,
+            ThreadCount = c.Threads.Count,
+            ParentCategoryId = c.ParentCategoryId,
+            SubCategoryCount = c.SubCategories.Count
+        }).ToList();
 
         return new PagedResultDto<CategoryDto>
         {
-            Items = categories,
+            Items = items,
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount,
@@ -129,13 +108,12 @@ public class CategoryService : ICategoryService
 
     public async Task<CategoryDto?> GetCategoryByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        var category = await _unitOfWork.Categories.FirstOrDefaultWithIncludesAsync(
+            predicate: c => c.Id == id,
             include: query => query
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
             cancellationToken);
-
-        var category = categories.FirstOrDefault(c => c.Id == id);
 
         if (category == null)
             return null;
@@ -158,13 +136,12 @@ public class CategoryService : ICategoryService
 
     public async Task<CategoryDto?> GetCategoryBySlugAsync(string slug, CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        var category = await _unitOfWork.Categories.FirstOrDefaultWithIncludesAsync(
+            predicate: c => c.Slug == slug,
             include: query => query
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
             cancellationToken);
-
-        var category = categories.FirstOrDefault(c => c.Slug == slug);
 
         if (category == null)
             return null;
@@ -176,8 +153,10 @@ public class CategoryService : ICategoryService
             Slug = category.Slug,
             Description = category.Description,
             CreatedAt = category.CreatedAt,
-            UpdatedAt = category.UpdatedAt,            CreatedUserId = category.CreatedUserId,
-            UpdatedUserId = category.UpdatedUserId,            ThreadCount = category.Threads?.Count ?? 0,
+            UpdatedAt = category.UpdatedAt,
+            CreatedUserId = category.CreatedUserId,
+            UpdatedUserId = category.UpdatedUserId,
+            ThreadCount = category.Threads?.Count ?? 0,
             ParentCategoryId = category.ParentCategoryId,
             SubCategoryCount = category.SubCategories?.Count ?? 0
         };
@@ -189,9 +168,8 @@ public class CategoryService : ICategoryService
         var slug = GenerateSlug(createCategoryDto.Title);
 
         // Aynı slug var mı kontrol et
-        var categories = await _unitOfWork.Categories.GetAllAsync(cancellationToken);
-        var existingCategory = categories.FirstOrDefault(c =>
-            c.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+        var existingCategory = await _unitOfWork.Categories.FirstOrDefaultAsync(
+            c => c.Slug.ToLower() == slug.ToLower(), cancellationToken);
 
         if (existingCategory != null)
         {
@@ -267,9 +245,8 @@ public class CategoryService : ICategoryService
         var newSlug = GenerateSlug(updateCategoryDto.Title);
 
         // Farklı bir kategoride aynı slug var mı kontrol et
-        var categories = await _unitOfWork.Categories.GetAllAsync(cancellationToken);
-        var existingCategory = categories.FirstOrDefault(c =>
-            c.Slug.Equals(newSlug, StringComparison.OrdinalIgnoreCase) && c.Id != id);
+        var existingCategory = await _unitOfWork.Categories.FirstOrDefaultAsync(
+            c => c.Slug.ToLower() == newSlug.ToLower() && c.Id != id, cancellationToken);
 
         if (existingCategory != null)
         {
@@ -424,54 +401,52 @@ public class CategoryService : ICategoryService
 
     public async Task<IEnumerable<CategoryDto>> GetSubCategoriesAsync(int parentId, CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        var categories = await _unitOfWork.Categories.FindWithIncludesAsync(
+            predicate: c => c.ParentCategoryId == parentId,
             include: query => query
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
-        return categories
-            .Where(c => c.ParentCategoryId == parentId)
-            .Select(c => new CategoryDto
-            {
-                Id = c.Id,
-                Title = c.Title,
-                Slug = c.Slug,
-                Description = c.Description,
-                CreatedAt = c.CreatedAt,
-                UpdatedAt = c.UpdatedAt,
-                CreatedUserId = c.CreatedUserId,
-                UpdatedUserId = c.UpdatedUserId,
-                ThreadCount = c.Threads.Count,
-                ParentCategoryId = c.ParentCategoryId,
-                SubCategoryCount = c.SubCategories.Count
-            });
+        return categories.Select(c => new CategoryDto
+        {
+            Id = c.Id,
+            Title = c.Title,
+            Slug = c.Slug,
+            Description = c.Description,
+            CreatedAt = c.CreatedAt,
+            UpdatedAt = c.UpdatedAt,
+            CreatedUserId = c.CreatedUserId,
+            UpdatedUserId = c.UpdatedUserId,
+            ThreadCount = c.Threads.Count,
+            ParentCategoryId = c.ParentCategoryId,
+            SubCategoryCount = c.SubCategories.Count
+        });
     }
 
     public async Task<IEnumerable<CategoryDto>> GetRootCategoriesAsync(CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        var categories = await _unitOfWork.Categories.FindWithIncludesAsync(
+            predicate: c => c.ParentCategoryId == null,
             include: query => query
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
-        return categories
-            .Where(c => c.ParentCategoryId == null)
-            .Select(c => new CategoryDto
-            {
-                Id = c.Id,
-                Title = c.Title,
-                Slug = c.Slug,
-                Description = c.Description,
-                CreatedAt = c.CreatedAt,
-                UpdatedAt = c.UpdatedAt,
-                CreatedUserId = c.CreatedUserId,
-                UpdatedUserId = c.UpdatedUserId,
-                ThreadCount = c.Threads.Count,
-                ParentCategoryId = c.ParentCategoryId,
-                SubCategoryCount = c.SubCategories.Count
-            });
+        return categories.Select(c => new CategoryDto
+        {
+            Id = c.Id,
+            Title = c.Title,
+            Slug = c.Slug,
+            Description = c.Description,
+            CreatedAt = c.CreatedAt,
+            UpdatedAt = c.UpdatedAt,
+            CreatedUserId = c.CreatedUserId,
+            UpdatedUserId = c.UpdatedUserId,
+            ThreadCount = c.Threads.Count,
+            ParentCategoryId = c.ParentCategoryId,
+            SubCategoryCount = c.SubCategories.Count
+        });
     }
     
     // Helper Methods
@@ -527,8 +502,10 @@ public class CategoryService : ICategoryService
     
     private async Task DeleteSubCategoriesRecursiveAsync(int parentId, CancellationToken cancellationToken)
     {
-        var subCategories = await _unitOfWork.Categories.GetAllAsync(cancellationToken);
-        var children = subCategories.Where(c => c.ParentCategoryId == parentId).ToList();
+        var children = (await _unitOfWork.Categories.FindWithIncludesAsync(
+            predicate: c => c.ParentCategoryId == parentId,
+            include: q => q.Include(c => c.Threads),
+            cancellationToken: cancellationToken)).ToList();
 
         foreach (var child in children)
         {

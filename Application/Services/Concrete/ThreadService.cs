@@ -4,12 +4,13 @@ using Application.DTOs.User;
 using Application.DTOs.Category;
 using Application.Services.Abstractions;
 using Application.DTOs.Common;
-using Application.Common.Extensions;
+
 using Domain.Entities;
 using Domain.Services;
 using Persistence.UnitOfWork;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Linq.Expressions;
 
 namespace Application.Services.Concrete;
 
@@ -50,65 +51,58 @@ public class ThreadService : IThreadService
         if (pageSize < 1) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
 
-        // Include ile User ve Category bilgilerini yükle
-        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(t => t.User)
-                .Include(t => t.Category),
-            cancellationToken);
-        
-        IEnumerable<Threads> query = threads;
-
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            query = query.Where(t =>
-                (!string.IsNullOrEmpty(t.Title) && t.Title.Contains(q, StringComparison.OrdinalIgnoreCase))
-                || (!string.IsNullOrEmpty(t.Content) && t.Content.Contains(q, StringComparison.OrdinalIgnoreCase)));
-        }
-
-        if (categoryId.HasValue)
-        {
-            query = query.Where(t => t.CategoryId == categoryId.Value);
-        }
-
-        if (isSolved.HasValue)
-        {
-            query = query.Where(t => t.IsSolved == isSolved.Value);
-        }
-
-        if (userId.HasValue)
-        {
-            query = query.Where(t => t.UserId == userId.Value);
-        }
-
-        // Sıralama
         var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? "createdat" : sortBy.Trim();
         var normalizedSortDir = string.IsNullOrWhiteSpace(sortDir) ? "desc" : sortDir.Trim();
         var isAsc = string.Equals(normalizedSortDir, "asc", StringComparison.OrdinalIgnoreCase);
 
-        query = normalizedSortBy.ToLowerInvariant() switch
+        var queryLower = string.IsNullOrWhiteSpace(q) ? null : q.Trim().ToLower();
+
+        Expression<Func<Threads, bool>>? predicate = t =>
+            (queryLower == null
+             || (t.Title != null && t.Title.ToLower().Contains(queryLower))
+             || (t.Content != null && t.Content.ToLower().Contains(queryLower)))
+            && (!categoryId.HasValue || t.CategoryId == categoryId.Value)
+            && (!isSolved.HasValue || t.IsSolved == isSolved.Value)
+            && (!userId.HasValue || t.UserId == userId.Value);
+
+        Func<IQueryable<Threads>, IOrderedQueryable<Threads>> orderBy = normalizedSortBy.ToLowerInvariant() switch
         {
-            "createdat" => isAsc ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt),
-            "updatedat" => isAsc ? query.OrderBy(t => t.UpdatedAt) : query.OrderByDescending(t => t.UpdatedAt),
-            "title" => isAsc ? query.OrderBy(t => t.Title) : query.OrderByDescending(t => t.Title),
-            "viewcount" => isAsc ? query.OrderBy(t => t.ViewCount) : query.OrderByDescending(t => t.ViewCount),
-            _ => isAsc ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt)
+            "createdat" => q => isAsc ? q.OrderBy(t => t.CreatedAt) : q.OrderByDescending(t => t.CreatedAt),
+            "updatedat" => q => isAsc ? q.OrderBy(t => t.UpdatedAt) : q.OrderByDescending(t => t.UpdatedAt),
+            "title" => q => isAsc ? q.OrderBy(t => t.Title) : q.OrderByDescending(t => t.Title),
+            "viewcount" => q => isAsc ? q.OrderBy(t => t.ViewCount) : q.OrderByDescending(t => t.ViewCount),
+            _ => q => q.OrderByDescending(t => t.CreatedAt)
         };
 
-        // Extension metod ile sayfalandır
-        return query.ToPagedResult(page, pageSize, MapToDto);
+        var (threads, totalCount) = await _unitOfWork.Threads.FindPagedAsync(
+            predicate: predicate,
+            include: query => query
+                .Include(t => t.User)
+                .Include(t => t.Category),
+            orderBy: orderBy,
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
+
+        return new PagedResultDto<ThreadDto>
+        {
+            Items = threads.Select(MapToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
     }
 
     public async Task<ThreadDto?> GetThreadByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        // Include ile User ve Category bilgilerini yükle
-        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
+        var thread = await _unitOfWork.Threads.FirstOrDefaultWithIncludesAsync(
+            predicate: t => t.Id == id,
             include: query => query
                 .Include(t => t.User)
                 .Include(t => t.Category),
-            cancellationToken);
-        
-        var thread = threads.FirstOrDefault(t => t.Id == id);
+            cancellationToken: cancellationToken);
+
         if (thread == null)
         {
             return null;

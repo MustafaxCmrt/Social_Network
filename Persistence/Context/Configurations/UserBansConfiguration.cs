@@ -63,6 +63,9 @@ public class UserBansConfiguration : IEntityTypeConfiguration<UserBans>
         builder.HasIndex(ub => ub.UserId)
             .HasDatabaseName("IX_UserBans_UserId");
 
+        builder.HasIndex(ub => ub.ExpiresAt)
+            .HasDatabaseName("IX_UserBans_ExpiresAt");
+
         builder.HasIndex(ub => ub.IsActive)
             .HasDatabaseName("IX_UserBans_IsActive");
 

@@ -10,7 +10,13 @@ public class ReportsConfiguration : IEntityTypeConfiguration<Reports>
     public void Configure(EntityTypeBuilder<Reports> builder)
     {
         // Table name
-        builder.ToTable("Reports");
+        builder.ToTable(
+            "Reports",
+            t => t.HasCheckConstraint(
+                "CK_Reports_ExactlyOneTarget",
+                "((ReportedUserId IS NOT NULL AND ReportedPostId IS NULL AND ReportedThreadId IS NULL) OR " +
+                "(ReportedUserId IS NULL AND ReportedPostId IS NOT NULL AND ReportedThreadId IS NULL) OR " +
+                "(ReportedUserId IS NULL AND ReportedPostId IS NULL AND ReportedThreadId IS NOT NULL))"));
 
         // Primary Key
         builder.HasKey(r => r.Id);

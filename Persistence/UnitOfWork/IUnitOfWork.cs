@@ -17,6 +17,9 @@ public interface IUnitOfWork : IDisposable
     IRepository<UserMutes> UserMutes { get; }
     IRepository<PasswordResetTokens> PasswordResetTokens { get; }
     IRepository<AuditLogs> AuditLogs { get; }
+
+    // Read-only query repository'ler
+    IDashboardQueryRepository DashboardQueries { get; }
     
     // Kulüp sistemi repository'leri
     IRepository<ClubRequests> ClubRequests { get; }

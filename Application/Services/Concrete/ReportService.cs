@@ -27,10 +27,13 @@ public class ReportService : IReportService
     {
         _logger.LogInformation("Creating report by user {UserId}", reporterUserId);
 
-        // Validation: En az bir hedef seçilmiş mi?
-        if (!dto.ReportedUserId.HasValue && !dto.ReportedPostId.HasValue && !dto.ReportedThreadId.HasValue)
+        // Validation: Tam olarak bir hedef seçilmiş mi?
+        var targetCount = (dto.ReportedUserId.HasValue ? 1 : 0)
+                          + (dto.ReportedPostId.HasValue ? 1 : 0)
+                          + (dto.ReportedThreadId.HasValue ? 1 : 0);
+        if (targetCount != 1)
         {
-            throw new InvalidOperationException("At least one target must be specified (User, Post, or Thread).");
+            throw new InvalidOperationException("Tam olarak bir raporlama hedefi seçilmelidir (Kullanıcı, Post veya Thread).");
         }
 
         // Validation: Hedefler gerçekten var mı?
@@ -89,27 +92,20 @@ public class ReportService : IReportService
         _logger.LogInformation("Getting reports for user {UserId}, Page: {Page}, PageSize: {PageSize}", 
             userId, page, pageSize);
 
-        // GetAllWithIncludesAsync kullanarak tüm raporları al
-        var allReports = await _unitOfWork.Reports.GetAllWithIncludesAsync(
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 100) pageSize = 100;
+
+        var (reports, totalCount) = await _unitOfWork.Reports.FindPagedAsync(
+            predicate: r => r.ReporterId == userId,
             include: query => query
                 .Include(r => r.Reporter)
                 .Include(r => r.ReportedUser)
                 .Include(r => r.ReportedPost)
-                .Include(r => r.ReportedThread));
-
-        // Filtreleme ve sıralama
-        var filteredReports = allReports
-            .Where(r => r.ReporterId == userId)
-            .OrderByDescending(r => r.CreatedAt)
-            .ToList();
-
-        var totalCount = filteredReports.Count;
-        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-
-        var reports = filteredReports
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
+                .Include(r => r.ReportedThread),
+            orderBy: q => q.OrderByDescending(r => r.CreatedAt),
+            page: page,
+            pageSize: pageSize);
 
         var items = reports.Select(r => new ReportListDto
         {
@@ -128,7 +124,7 @@ public class ReportService : IReportService
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount,
-            TotalPages = totalPages
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
         };
     }
 
@@ -137,32 +133,20 @@ public class ReportService : IReportService
         _logger.LogInformation("Getting all reports, Status: {Status}, Page: {Page}, PageSize: {PageSize}", 
             status, page, pageSize);
 
-        // GetAllWithIncludesAsync kullanarak tüm raporları al
-        var allReports = await _unitOfWork.Reports.GetAllWithIncludesAsync(
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 100) pageSize = 100;
+
+        var (reports, totalCount) = await _unitOfWork.Reports.FindPagedAsync(
+            predicate: status.HasValue ? r => r.Status == status.Value : null,
             include: query => query
                 .Include(r => r.Reporter)
                 .Include(r => r.ReportedUser)
                 .Include(r => r.ReportedPost)
-                .Include(r => r.ReportedThread));
-
-        // Filtreleme ve sıralama
-        var filteredReports = allReports.AsEnumerable();
-        
-        if (status.HasValue)
-        {
-            filteredReports = filteredReports.Where(r => r.Status == status.Value);
-        }
-
-        filteredReports = filteredReports.OrderByDescending(r => r.CreatedAt);
-
-        var reportsList = filteredReports.ToList();
-        var totalCount = reportsList.Count;
-        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-
-        var reports = reportsList
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
+                .Include(r => r.ReportedThread),
+            orderBy: q => q.OrderByDescending(r => r.CreatedAt),
+            page: page,
+            pageSize: pageSize);
 
         var items = reports.Select(r => new ReportListDto
         {
@@ -181,7 +165,7 @@ public class ReportService : IReportService
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount,
-            TotalPages = totalPages
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
         };
     }
 
@@ -189,16 +173,14 @@ public class ReportService : IReportService
     {
         _logger.LogInformation("Getting report {ReportId} for user {UserId}", reportId, requestingUserId);
 
-        // GetAllWithIncludesAsync kullanarak raporu bul
-        var allReports = await _unitOfWork.Reports.GetAllWithIncludesAsync(
+        var report = await _unitOfWork.Reports.FirstOrDefaultWithIncludesAsync(
+            predicate: r => r.Id == reportId,
             include: query => query
                 .Include(r => r.Reporter)
                 .Include(r => r.ReportedUser)
                 .Include(r => r.ReportedPost)
                 .Include(r => r.ReportedThread)
                 .Include(r => r.ReviewedByUser));
-
-        var report = allReports.FirstOrDefault(r => r.Id == reportId);
 
         if (report == null)
         {

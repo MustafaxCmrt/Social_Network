@@ -11,12 +11,13 @@ public class CreateReportDtoValidator : AbstractValidator<CreateReportDto>
 {
     public CreateReportDtoValidator()
     {
-        // En az bir raporlama hedefi seçilmeli (User, Post veya Thread)
+        // Tam olarak bir raporlama hedefi seçilmeli (User, Post veya Thread)
         RuleFor(x => x)
-            .Must(x => x.ReportedUserId.HasValue || 
-                      x.ReportedPostId.HasValue || 
-                      x.ReportedThreadId.HasValue)
-            .WithMessage("En az bir raporlama hedefi seçilmelidir (Kullanıcı, Post veya Thread).");
+            .Must(x =>
+                (x.ReportedUserId.HasValue ? 1 : 0) +
+                (x.ReportedPostId.HasValue ? 1 : 0) +
+                (x.ReportedThreadId.HasValue ? 1 : 0) == 1)
+            .WithMessage("Tam olarak bir raporlama hedefi seçilmelidir (Kullanıcı, Post veya Thread).");
         
         // Reason zorunlu ve geçerli bir enum değeri olmalı
         RuleFor(x => x.Reason)

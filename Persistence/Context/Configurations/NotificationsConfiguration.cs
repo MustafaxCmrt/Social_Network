@@ -27,6 +27,9 @@ public class NotificationsConfiguration : IEntityTypeConfiguration<Notifications
         // Indexes
         builder.HasIndex(n => n.UserId)
             .HasDatabaseName("IX_Notifications_UserId");
+
+        builder.HasIndex(n => new { n.UserId, n.IsRead })
+            .HasDatabaseName("IX_Notifications_UserId_IsRead");
         
         builder.HasIndex(n => n.IsRead)
             .HasDatabaseName("IX_Notifications_IsRead");

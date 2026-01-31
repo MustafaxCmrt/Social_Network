@@ -42,33 +42,36 @@ public class PostService : IPostService
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        // Include ile User bilgilerini yükle
-        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
-            include: query => query.Include(p => p.User),
+        var (posts, totalCount) = await _unitOfWork.Posts.FindPagedAsync(
+            predicate: p => p.ThreadId == threadId && p.ParentPostId == null,
+            include: query => query.Include(p => p.User).Include(p => p.Replies),
+            orderBy: q => q.OrderByDescending(p => p.IsSolution)
+                           .ThenByDescending(p => p.CreatedAt)
+                           .ThenByDescending(p => p.UpvoteCount)
+                           .ThenBy(p => p.Id),
+            page: page,
+            pageSize: pageSize,
             cancellationToken);
-        
-        // Sadece ana yorumları getir (ParentPostId = null)
-        var posts = allPosts.Where(p => p.ThreadId == threadId && p.ParentPostId == null);
 
-        // Sırala ve sayfalandır
-        var ordered = posts
-            .OrderByDescending(p => p.IsSolution)  // Çözüm işaretli önce
-            .ThenByDescending(p => p.CreatedAt)    // En yeni tarih
-            .ThenByDescending(p => p.UpvoteCount)  // Beğeni sayısı
-            .ThenBy(p => p.Id);                    // ID
+        var items = posts.Select(MapToDto).ToList();
 
-        // Extension metod ile sayfalandır
-        return ordered.ToPagedResult(page, pageSize, MapToDto);
+        return new PagedResultDto<PostDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
     }
 
     public async Task<PostDto?> GetPostByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        // Include ile User bilgilerini yükle
-        var posts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
-            include: query => query.Include(p => p.User),
+        var post = await _unitOfWork.Posts.FirstOrDefaultWithIncludesAsync(
+            predicate: p => p.Id == id,
+            include: query => query.Include(p => p.User).Include(p => p.Replies),
             cancellationToken);
-        
-        var post = posts.FirstOrDefault(p => p.Id == id);
+
         return post == null ? null : MapToDto(post);
     }
 
@@ -427,16 +430,15 @@ public class PostService : IPostService
         {
             // Aktif begeni varsa kaldir (Toggle OFF - Soft Delete)
             _unitOfWork.PostVotes.Delete(existingVote);
-            
-            if (post.UpvoteCount > 0)
-            {
-                post.UpvoteCount--;
-                _unitOfWork.Posts.Update(post);
-            }
-            
-            // Kaydet ve change tracker'i temizle
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            
+
+            // Race condition koruması: Gerçek sayıyı DB'den hesapla
+            var actualCount = await _unitOfWork.PostVotes.CountAsync(
+                pv => pv.PostId == postId, cancellationToken);
+            post.UpvoteCount = actualCount;
+            _unitOfWork.Posts.Update(post);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
             isUpvoted = false;
             message = "Begeni kaldirildi";
         }
@@ -448,15 +450,18 @@ public class PostService : IPostService
             existingVote.DeletedUserId = null;
             existingVote.Recstatus = true;
             _unitOfWork.PostVotes.Update(existingVote);
-            
-            post.UpvoteCount++;
-            _unitOfWork.Posts.Update(post);
-            
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            
+
+            // Race condition koruması: Gerçek sayıyı DB'den hesapla
+            var actualCount = await _unitOfWork.PostVotes.CountAsync(
+                pv => pv.PostId == postId, cancellationToken);
+            post.UpvoteCount = actualCount;
+            _unitOfWork.Posts.Update(post);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
             isUpvoted = true;
             message = "Yorum begenildi";
-            
+
             // BILDIRIM GONDER
             if (post.UserId != userId)
             {
@@ -472,16 +477,18 @@ public class PostService : IPostService
                 UserId = userId
             };
             await _unitOfWork.PostVotes.CreateAsync(vote, cancellationToken);
-            
-            post.UpvoteCount++;
-            _unitOfWork.Posts.Update(post);
-            
-            // Kaydet
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            
+
+            // Race condition koruması: Gerçek sayıyı DB'den hesapla
+            var actualCount = await _unitOfWork.PostVotes.CountAsync(
+                pv => pv.PostId == postId, cancellationToken);
+            post.UpvoteCount = actualCount;
+            _unitOfWork.Posts.Update(post);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
             isUpvoted = true;
             message = "Yorum begenildi";
-            
+
             // BILDIRIM GONDER
             if (post.UserId != userId)
             {
@@ -533,21 +540,27 @@ public class PostService : IPostService
             throw new KeyNotFoundException($"Post ID {postId} bulunamadı");
         }
 
-        // 2. Include ile User bilgilerini yükle ve cevapları getir
-        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
-            include: query => query.Include(p => p.User),
+        // 2. Cevapları sayfalayarak getir
+        var (replies, totalCount) = await _unitOfWork.Posts.FindPagedAsync(
+            predicate: p => p.ParentPostId == postId,
+            include: query => query.Include(p => p.User).Include(p => p.Replies),
+            orderBy: q => q.OrderByDescending(p => p.UpvoteCount)
+                           .ThenByDescending(p => p.CreatedAt)
+                           .ThenBy(p => p.Id),
+            page: page,
+            pageSize: pageSize,
             cancellationToken);
-        
-        var replies = allPosts.Where(p => p.ParentPostId == postId);
 
-        // 3. En çok beğenilene göre sırala ve sayfalandır
-        var ordered = replies
-            .OrderByDescending(p => p.UpvoteCount)
-            .ThenByDescending(p => p.CreatedAt)
-            .ThenBy(p => p.Id);
+        var items = replies.Select(MapToDto).ToList();
 
-        // Extension metod ile sayfalandır
-        return ordered.ToPagedResult(page, pageSize, MapToDto);
+        return new PagedResultDto<PostDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
     }
 
     /// <summary>
@@ -585,12 +598,6 @@ public class PostService : IPostService
 
     private PostDto MapToDto(Posts post)
     {
-        // Reply count hesapla (senkron - zaten bellekteki liste üzerinden)
-        var replyCount = _unitOfWork.Posts
-            .FindAsync(p => p.ParentPostId == post.Id)
-            .Result
-            .Count();
-
         return new PostDto
         {
             Id = post.Id,
@@ -602,7 +609,7 @@ public class PostService : IPostService
             IsSolution = post.IsSolution,
             UpvoteCount = post.UpvoteCount,
             ParentPostId = post.ParentPostId,
-            ReplyCount = replyCount,
+            ReplyCount = post.Replies?.Count(r => !r.IsDeleted) ?? 0,
             CreatedAt = post.CreatedAt,
             UpdatedAt = post.UpdatedAt,
             User = post.User == null ? null : new UserSummaryDto

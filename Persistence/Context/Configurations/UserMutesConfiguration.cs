@@ -63,6 +63,9 @@ public class UserMutesConfiguration : IEntityTypeConfiguration<UserMutes>
         builder.HasIndex(um => um.UserId)
             .HasDatabaseName("IX_UserMutes_UserId");
 
+        builder.HasIndex(um => um.ExpiresAt)
+            .HasDatabaseName("IX_UserMutes_ExpiresAt");
+
         builder.HasIndex(um => um.IsActive)
             .HasDatabaseName("IX_UserMutes_IsActive");
 

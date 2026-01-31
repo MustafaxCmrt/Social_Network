@@ -58,51 +58,38 @@ public class AuditLogService : IAuditLogService
     {
         try
         {
-            var allLogs = await _unitOfWork.AuditLogs.GetAllAsync(cancellationToken);
-            
-            // Filtreleme
-            var filteredLogs = allLogs.AsEnumerable();
+            // Filtreleri DB tarafında uygula
+            var userId = filter.UserId;
+            var action = filter.Action?.ToLower();
+            var entityType = filter.EntityType;
+            var entityId = filter.EntityId;
+            var success = filter.Success;
+            var startDate = filter.StartDate;
+            var endDate = filter.EndDate;
 
-            if (filter.UserId.HasValue)
-                filteredLogs = filteredLogs.Where(l => l.UserId == filter.UserId.Value);
+            var (logs, totalCount) = await _unitOfWork.AuditLogs.FindPagedAsync(
+                predicate: l =>
+                    (!userId.HasValue || l.UserId == userId.Value) &&
+                    (action == null || l.Action.ToLower().Contains(action)) &&
+                    (entityType == null || l.EntityType == entityType) &&
+                    (!entityId.HasValue || l.EntityId == entityId.Value) &&
+                    (!success.HasValue || l.Success == success.Value) &&
+                    (!startDate.HasValue || l.CreatedAt >= startDate.Value) &&
+                    (!endDate.HasValue || l.CreatedAt <= endDate.Value),
+                orderBy: q => q.OrderByDescending(l => l.CreatedAt),
+                page: filter.Page,
+                pageSize: filter.PageSize,
+                cancellationToken: cancellationToken);
 
-            if (!string.IsNullOrEmpty(filter.Action))
-                filteredLogs = filteredLogs.Where(l => l.Action.Contains(filter.Action, StringComparison.OrdinalIgnoreCase));
-
-            if (!string.IsNullOrEmpty(filter.EntityType))
-                filteredLogs = filteredLogs.Where(l => l.EntityType == filter.EntityType);
-
-            if (filter.EntityId.HasValue)
-                filteredLogs = filteredLogs.Where(l => l.EntityId == filter.EntityId.Value);
-
-            if (filter.Success.HasValue)
-                filteredLogs = filteredLogs.Where(l => l.Success == filter.Success.Value);
-
-            if (filter.StartDate.HasValue)
-                filteredLogs = filteredLogs.Where(l => l.CreatedAt >= filter.StartDate.Value);
-
-            if (filter.EndDate.HasValue)
-                filteredLogs = filteredLogs.Where(l => l.CreatedAt <= filter.EndDate.Value);
-
-            // Sıralama (en yeni en üstte)
-            var sortedLogs = filteredLogs.OrderByDescending(l => l.CreatedAt);
-
-            // Toplam sayı
-            var totalCount = sortedLogs.Count();
-
-            // Sayfalama
-            var pagedLogs = sortedLogs
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .Select(MapToListDto)
-                .ToList();
+            var pagedLogs = logs.Select(MapToListDto).ToList();
 
             return new PagedResultDto<AuditLogListDto>
             {
                 Items = pagedLogs,
                 TotalCount = totalCount,
                 Page = filter.Page,
-                PageSize = filter.PageSize
+                PageSize = filter.PageSize,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)filter.PageSize)
             };
         }
         catch (Exception ex)

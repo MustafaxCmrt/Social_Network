@@ -142,43 +142,36 @@ public class UserService : IUserService
         if (pageSize < 1) pageSize = 10;
         if (pageSize > 100) pageSize = 100; // Maksimum 100 kayıt
 
-        var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
-        
-        // IsDeleted olmayan kullanıcıları filtrele
-        var query = allUsers.Where(u => !u.IsDeleted).AsQueryable();
+        System.Linq.Expressions.Expression<Func<Users, bool>>? predicate = null;
 
-        // Search filtresi varsa uygula
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             var lowerSearchTerm = searchTerm.ToLower();
-            query = query.Where(u => 
+            predicate = u =>
                 u.Username.ToLower().Contains(lowerSearchTerm) ||
                 u.FirstName.ToLower().Contains(lowerSearchTerm) ||
                 u.LastName.ToLower().Contains(lowerSearchTerm) ||
-                u.Email.ToLower().Contains(lowerSearchTerm));
+                u.Email.ToLower().Contains(lowerSearchTerm);
         }
 
-        // Toplam kayıt sayısı
-        var totalCount = query.Count();
-        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        var (usersResult, totalCount) = await _unitOfWork.Users.FindPagedAsync(
+            predicate: predicate,
+            orderBy: q => q.OrderByDescending(u => u.CreatedAt),
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
 
-        // Pagination uygula
-        var users = query
-            .OrderByDescending(u => u.CreatedAt) // En yeni kullanıcılar önce
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(u => new UserListDto
-            {
-                UserId = u.Id,
-                Username = u.Username,
-                FirstName = u.FirstName,
-                LastName = u.LastName,
-                ProfileImg = u.ProfileImg,
-                Email = u.Email,
-                Role = u.Role.ToString(),
-                IsActive = u.IsActive
-            })
-            .ToList();
+        var users = usersResult.Select(u => new UserListDto
+        {
+            UserId = u.Id,
+            Username = u.Username,
+            FirstName = u.FirstName,
+            LastName = u.LastName,
+            ProfileImg = u.ProfileImg,
+            Email = u.Email,
+            Role = u.Role.ToString(),
+            IsActive = u.IsActive
+        }).ToList();
 
         return new Application.DTOs.Common.PagedResultDto<UserListDto>
         {
@@ -186,7 +179,7 @@ public class UserService : IUserService
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount,
-            TotalPages = totalPages
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
         };
     }
 
@@ -604,16 +597,16 @@ public class UserService : IUserService
         // Toplam sayfa sayısını hesapla
         var totalPages = (int)Math.Ceiling(totalThreads / (double)pageSize);
 
-        // Thread'leri Posts bilgisiyle birlikte getir (PostCount için)
-        var allThreads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
+        // Thread'leri sayfalayarak getir
+        var (threads, _) = await _unitOfWork.Threads.FindPagedAsync(
+            predicate: t => t.UserId == userId,
             include: q => q.Include(t => t.Posts),
+            orderBy: q => q.OrderByDescending(t => t.CreatedAt),
+            page: pageNumber,
+            pageSize: pageSize,
             cancellationToken
         );
-        var userThreads = allThreads
-            .Where(t => t.UserId == userId && !t.IsDeleted)
-            .OrderByDescending(t => t.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+        var userThreads = threads
             .Select(t => new Application.DTOs.Thread.ThreadDto
             {
                 Id = t.Id,
@@ -674,16 +667,16 @@ public class UserService : IUserService
         // Toplam sayfa sayısını hesapla
         var totalPages = (int)Math.Ceiling(totalPosts / (double)pageSize);
 
-        // Post'ları Thread bilgisiyle birlikte getir
-        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
-            include: q => q.Include(p => p.Thread),
+        // Post'ları sayfalayarak getir
+        var (posts, _) = await _unitOfWork.Posts.FindPagedAsync(
+            predicate: p => p.UserId == userId,
+            include: q => q.Include(p => p.Thread).Include(p => p.Replies),
+            orderBy: q => q.OrderByDescending(p => p.CreatedAt),
+            page: pageNumber,
+            pageSize: pageSize,
             cancellationToken
         );
-        var userPosts = allPosts
-            .Where(p => p.UserId == userId && !p.IsDeleted)
-            .OrderByDescending(p => p.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+        var userPosts = posts
             .Select(p => new Application.DTOs.Post.PostDto
             {
                 Id = p.Id,
@@ -695,7 +688,7 @@ public class UserService : IUserService
                 IsSolution = p.IsSolution,
                 UpvoteCount = p.UpvoteCount,
                 ParentPostId = p.ParentPostId,
-                ReplyCount = p.Replies.Count,
+                ReplyCount = p.Replies.Count(r => !r.IsDeleted),
                 CreatedAt = p.CreatedAt,
                 UpdatedAt = p.UpdatedAt
             })

@@ -64,29 +64,18 @@ public class DashboardService : IDashboardService
     {
         try
         {
-            var allUsers = await _unitOfWork.Users.FindAsync(u => !u.IsDeleted, cancellationToken);
-            
-            var topUsersList = new List<TopUserDto>();
+            var rows = await _unitOfWork.DashboardQueries.GetTopUsersRowsAsync(topCount, cancellationToken);
 
-            foreach (var user in allUsers)
-            {
-                var threadCount = await _unitOfWork.Threads.CountAsync(t => t.UserId == user.Id && !t.IsDeleted, cancellationToken);
-                var postCount = await _unitOfWork.Posts.CountAsync(p => p.UserId == user.Id && !p.IsDeleted, cancellationToken);
-
-                topUsersList.Add(new TopUserDto
+            return rows
+                .Select(x => new TopUserDto
                 {
-                    UserId = user.Id,
-                    Username = user.Username,
-                    Email = user.Email,
-                    ThreadCount = threadCount,
-                    PostCount = postCount,
-                    TotalActivity = threadCount + postCount
-                });
-            }
-
-            return topUsersList
-                .OrderByDescending(x => x.TotalActivity)
-                .Take(topCount)
+                    UserId = x.UserId,
+                    Username = x.Username,
+                    Email = x.Email,
+                    ThreadCount = x.ThreadCount,
+                    PostCount = x.PostCount,
+                    TotalActivity = x.TotalActivity
+                })
                 .ToList();
         }
         catch (Exception ex)
@@ -100,64 +89,80 @@ public class DashboardService : IDashboardService
     {
         try
         {
-            var allReports = await _unitOfWork.Reports.FindAsync(r => !r.IsDeleted, cancellationToken);
+            var rows = await _unitOfWork.DashboardQueries.GetTopReportedContentRowsAsync(topCount, cancellationToken);
 
-            var groupedReports = allReports
-                .GroupBy(r => new { r.ReportedUserId, r.ReportedThreadId, r.ReportedPostId })
-                .Select(g => new
-                {
-                    ContentId = g.Key.ReportedUserId ?? g.Key.ReportedThreadId ?? g.Key.ReportedPostId ?? 0,
-                    ContentType = g.Key.ReportedUserId != null ? "User" :
-                                  g.Key.ReportedThreadId != null ? "Thread" : "Post",
-                    ReportCount = g.Count(),
-                    LastReportedAt = g.Max(r => r.CreatedAt),
-                    UserId = g.Key.ReportedUserId,
-                    ThreadId = g.Key.ReportedThreadId,
-                    PostId = g.Key.ReportedPostId
-                })
-                .OrderByDescending(x => x.ReportCount)
-                .Take(topCount)
+            var userIds = rows
+                .Where(r => r.ContentType == "User")
+                .Select(r => r.ContentId)
+                .Distinct()
                 .ToList();
 
-            var result = new List<TopReportedContentDto>();
+            var threadIds = rows
+                .Where(r => r.ContentType == "Thread")
+                .Select(r => r.ContentId)
+                .Distinct()
+                .ToList();
 
-            foreach (var item in groupedReports)
-            {
-                string contentPreview = "Unknown";
+            var postIds = rows
+                .Where(r => r.ContentType == "Post")
+                .Select(r => r.ContentId)
+                .Distinct()
+                .ToList();
 
-                if (item.ContentType == "User" && item.UserId.HasValue)
-                {
-                    var user = await _unitOfWork.Users.GetByIdAsync(item.UserId.Value, cancellationToken);
-                    contentPreview = user != null ? $"@{user.Username}" : "Deleted User";
-                }
-                else if (item.ContentType == "Thread" && item.ThreadId.HasValue)
-                {
-                    var thread = await _unitOfWork.Threads.GetByIdAsync(item.ThreadId.Value, cancellationToken);
-                    contentPreview = thread != null ? thread.Title : "Deleted Thread";
-                }
-                else if (item.ContentType == "Post" && item.PostId.HasValue)
-                {
-                    var post = await _unitOfWork.Posts.GetByIdAsync(item.PostId.Value, cancellationToken);
-                    contentPreview = post != null ? (post.Content.Length > 50 ? post.Content.Substring(0, 50) + "..." : post.Content) : "Deleted Post";
-                }
+            var users = userIds.Count == 0
+                ? []
+                : await _unitOfWork.Users.FindAsync(u => userIds.Contains(u.Id), cancellationToken);
 
-                result.Add(new TopReportedContentDto
-                {
-                    ContentId = item.ContentId,
-                    ContentType = item.ContentType,
-                    ContentPreview = contentPreview,
-                    ReportCount = item.ReportCount,
-                    LastReportedAt = item.LastReportedAt
-                });
-            }
+            var threads = threadIds.Count == 0
+                ? []
+                : await _unitOfWork.Threads.FindAsync(t => threadIds.Contains(t.Id), cancellationToken);
 
-            return result;
+            var posts = postIds.Count == 0
+                ? []
+                : await _unitOfWork.Posts.FindAsync(p => postIds.Contains(p.Id), cancellationToken);
+
+            var userMap = users.ToDictionary(u => u.Id, u => u.Username);
+            var threadMap = threads.ToDictionary(t => t.Id, t => t.Title);
+            var postMap = posts.ToDictionary(p => p.Id, p => p.Content);
+
+            return rows
+                .Select(r => new TopReportedContentDto
+                {
+                    ContentId = r.ContentId,
+                    ContentType = r.ContentType,
+                    ContentPreview = BuildContentPreview(r.ContentType, r.ContentId, userMap, threadMap, postMap),
+                    ReportCount = r.ReportCount,
+                    LastReportedAt = r.LastReportedAt
+                })
+                .ToList();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting top reported content");
             throw;
         }
+    }
+
+    private static string BuildContentPreview(
+        string contentType,
+        int contentId,
+        IReadOnlyDictionary<int, string> userMap,
+        IReadOnlyDictionary<int, string> threadMap,
+        IReadOnlyDictionary<int, string> postMap)
+    {
+        return contentType switch
+        {
+            "User" => userMap.TryGetValue(contentId, out var username)
+                ? $"@{username}"
+                : "Deleted User",
+            "Thread" => threadMap.TryGetValue(contentId, out var title)
+                ? title
+                : "Deleted Thread",
+            "Post" => postMap.TryGetValue(contentId, out var content)
+                ? (content.Length > 50 ? content.Substring(0, 50) + "..." : content)
+                : "Deleted Post",
+            _ => "Unknown"
+        };
     }
 
     #region Private Helper Methods
@@ -178,9 +183,12 @@ public class DashboardService : IDashboardService
         var totalAdmins = await _unitOfWork.Users.CountAsync(u => !u.IsDeleted && u.Role == Roles.Admin, cancellationToken);
 
         // Aktif banlar
+        // Not: Bir kullanıcı için birden fazla aktif ban kaydı varsa, bu count kullanıcı sayısından fazla olabilir.
+        // Normal akışta aynı kullanıcıya ikinci aktif ban verilmiyor, bu yüzden pratikte doğru sayım olur.
         var now = DateTime.UtcNow;
-        var allBans = await _unitOfWork.UserBans.FindAsync(b => !b.IsDeleted, cancellationToken);
-        var activeBans = allBans.Where(b => b.ExpiresAt == null || b.ExpiresAt > now).Select(b => b.UserId).Distinct().Count();
+        var activeBans = await _unitOfWork.UserBans.CountAsync(
+            b => !b.IsDeleted && b.IsActive && (b.ExpiresAt == null || b.ExpiresAt > now),
+            cancellationToken);
 
         return new UserStatsDto
         {
@@ -244,17 +252,19 @@ public class DashboardService : IDashboardService
     {
         var now = DateTime.UtcNow;
 
-        var allBans = await _unitOfWork.UserBans.FindAsync(b => !b.IsDeleted, cancellationToken);
-        var allMutes = await _unitOfWork.UserMutes.FindAsync(m => !m.IsDeleted, cancellationToken);
+        var activeBans = await _unitOfWork.UserBans.CountAsync(
+            b => !b.IsDeleted && b.IsActive && (b.ExpiresAt == null || b.ExpiresAt > now),
+            cancellationToken);
 
-        var activeBans = allBans.Count(b => b.ExpiresAt == null || b.ExpiresAt > now);
-        var activeMutes = allMutes.Count(m => m.ExpiresAt > now);
+        var activeMutes = await _unitOfWork.UserMutes.CountAsync(
+            m => !m.IsDeleted && m.IsActive && m.ExpiresAt > now,
+            cancellationToken);
 
-        var totalBans = allBans.Count();
-        var totalMutes = allMutes.Count();
+        var totalBans = await _unitOfWork.UserBans.CountAsync(b => !b.IsDeleted, cancellationToken);
+        var totalMutes = await _unitOfWork.UserMutes.CountAsync(m => !m.IsDeleted, cancellationToken);
 
-        var bansToday = allBans.Count(b => b.CreatedAt >= today);
-        var mutesToday = allMutes.Count(m => m.CreatedAt >= today);
+        var bansToday = await _unitOfWork.UserBans.CountAsync(b => !b.IsDeleted && b.CreatedAt >= today, cancellationToken);
+        var mutesToday = await _unitOfWork.UserMutes.CountAsync(m => !m.IsDeleted && m.CreatedAt >= today, cancellationToken);
 
         return new ModerationStatsDto
         {

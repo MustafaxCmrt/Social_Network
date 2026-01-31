@@ -15,7 +15,8 @@ public static class ServiceRegistration
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseMySql(
                 connectionString,
-                new MySqlServerVersion(new Version(9, 4, 0))
+                new MySqlServerVersion(new Version(9, 4, 0)),
+                mySqlOptions => mySqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
             ));
 
         // UnitOfWork

@@ -24,6 +24,8 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<UserMutes>? _userMutes;
     private IRepository<PasswordResetTokens>? _passwordResetTokens;
     private IRepository<AuditLogs>? _auditLogs;
+
+    private IDashboardQueryRepository? _dashboardQueries;
     
     // Kulüp sistemi
     private IRepository<ClubRequests>? _clubRequests;
@@ -48,6 +50,8 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<UserMutes> UserMutes => _userMutes ??= new Repository<UserMutes>(_context);
     public IRepository<PasswordResetTokens> PasswordResetTokens => _passwordResetTokens ??= new Repository<PasswordResetTokens>(_context);
     public IRepository<AuditLogs> AuditLogs => _auditLogs ??= new Repository<AuditLogs>(_context);
+
+    public IDashboardQueryRepository DashboardQueries => _dashboardQueries ??= new DashboardQueryRepository(_context);
     
     // Kulüp sistemi repository'leri
     public IRepository<ClubRequests> ClubRequests => _clubRequests ??= new Repository<ClubRequests>(_context);

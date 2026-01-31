@@ -40,51 +40,36 @@ public class SearchService : ISearchService
             };
         }
 
-        // Tüm thread'leri User ve Category ile birlikte al
-        var allThreads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(t => t.User)
-                .Include(t => t.Category),
+        var queryLower = query.ToLower();
+        var catId = categoryId;
+
+        var (threads, totalResults) = await _unitOfWork.Threads.FindPagedAsync(
+            predicate: t => (t.Title.ToLower().Contains(queryLower) ||
+                            t.Content.ToLower().Contains(queryLower)) &&
+                           (!catId.HasValue || t.CategoryId == catId.Value),
+            include: q => q.Include(t => t.User).Include(t => t.Category),
+            orderBy: q => q.OrderByDescending(t => t.CreatedAt),
+            page: pageNumber,
+            pageSize: pageSize,
             cancellationToken: cancellationToken);
 
-        // Arama ve filtreleme
-        var queryLower = query.ToLower();
-        var filteredThreads = allThreads
-            .Where(t => !t.IsDeleted &&
-                       (t.Title.ToLower().Contains(queryLower) ||
-                        t.Content.ToLower().Contains(queryLower)))
-            .AsEnumerable();
-
-        // Kategori filtresi varsa uygula
-        if (categoryId.HasValue)
-        {
-            filteredThreads = filteredThreads.Where(t => t.CategoryId == categoryId.Value);
-        }
-
-        var totalResults = filteredThreads.Count();
         var totalPages = (int)Math.Ceiling(totalResults / (double)pageSize);
 
-        // Sayfalama ve DTO'ya çevir
-        var results = filteredThreads
-            .OrderByDescending(t => t.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .Select(t => new SearchThreadResultDto
-            {
-                Id = t.Id,
-                Title = t.Title,
-                Content = t.Content.Length > 200 ? t.Content.Substring(0, 200) + "..." : t.Content,
-                ViewCount = t.ViewCount,
-                IsSolved = t.IsSolved,
-                PostCount = t.PostCount,
-                UserId = t.UserId,
-                Username = t.User?.Username ?? "Unknown",
-                CategoryId = t.CategoryId,
-                CategoryName = t.Category?.Title ?? "Unknown",
-                CreatedAt = t.CreatedAt,
-                UpdatedAt = t.UpdatedAt
-            })
-            .ToList();
+        var results = threads.Select(t => new SearchThreadResultDto
+        {
+            Id = t.Id,
+            Title = t.Title,
+            Content = t.Content.Length > 200 ? t.Content.Substring(0, 200) + "..." : t.Content,
+            ViewCount = t.ViewCount,
+            IsSolved = t.IsSolved,
+            PostCount = t.PostCount,
+            UserId = t.UserId,
+            Username = t.User?.Username ?? "Unknown",
+            CategoryId = t.CategoryId,
+            CategoryName = t.Category?.Title ?? "Unknown",
+            CreatedAt = t.CreatedAt,
+            UpdatedAt = t.UpdatedAt
+        }).ToList();
 
         return new SearchResponseDto<SearchThreadResultDto>
         {
@@ -119,43 +104,33 @@ public class SearchService : ISearchService
             };
         }
 
-        // Tüm post'ları User ve Thread ile birlikte al
-        var allPosts = await _unitOfWork.Posts.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(p => p.User)
-                .Include(p => p.Thread),
+        var queryLower = query.ToLower();
+
+        var (posts, totalResults) = await _unitOfWork.Posts.FindPagedAsync(
+            predicate: p => p.Content.ToLower().Contains(queryLower),
+            include: q => q.Include(p => p.User).Include(p => p.Thread),
+            orderBy: q => q.OrderByDescending(p => p.CreatedAt),
+            page: pageNumber,
+            pageSize: pageSize,
             cancellationToken: cancellationToken);
 
-        // Arama
-        var queryLower = query.ToLower();
-        var filteredPosts = allPosts
-            .Where(p => !p.IsDeleted && p.Content.ToLower().Contains(queryLower))
-            .ToList();
-
-        var totalResults = filteredPosts.Count;
         var totalPages = (int)Math.Ceiling(totalResults / (double)pageSize);
 
-        // Sayfalama ve DTO'ya çevir
-        var results = filteredPosts
-            .OrderByDescending(p => p.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .Select(p => new SearchPostResultDto
-            {
-                Id = p.Id,
-                Content = p.Content.Length > 200 ? p.Content.Substring(0, 200) + "..." : p.Content,
-                Img = p.Img,
-                IsSolution = p.IsSolution,
-                UpvoteCount = p.UpvoteCount,
-                ThreadId = p.ThreadId,
-                ThreadTitle = p.Thread?.Title ?? "Unknown",
-                UserId = p.UserId,
-                Username = p.User?.Username ?? "Unknown",
-                ParentPostId = p.ParentPostId,
-                CreatedAt = p.CreatedAt,
-                UpdatedAt = p.UpdatedAt
-            })
-            .ToList();
+        var results = posts.Select(p => new SearchPostResultDto
+        {
+            Id = p.Id,
+            Content = p.Content.Length > 200 ? p.Content.Substring(0, 200) + "..." : p.Content,
+            Img = p.Img,
+            IsSolution = p.IsSolution,
+            UpvoteCount = p.UpvoteCount,
+            ThreadId = p.ThreadId,
+            ThreadTitle = p.Thread?.Title ?? "Unknown",
+            UserId = p.UserId,
+            Username = p.User?.Username ?? "Unknown",
+            ParentPostId = p.ParentPostId,
+            CreatedAt = p.CreatedAt,
+            UpdatedAt = p.UpdatedAt
+        }).ToList();
 
         return new SearchResponseDto<SearchPostResultDto>
         {
@@ -190,55 +165,31 @@ public class SearchService : ISearchService
             };
         }
 
-        // Tüm kullanıcıları al
-        var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
-
-        // Arama
         var queryLower = query.ToLower();
-        var filteredUsers = allUsers
-            .Where(u => !u.IsDeleted &&
-                       (u.Username.ToLower().Contains(queryLower) ||
-                        u.FirstName.ToLower().Contains(queryLower) ||
-                        u.LastName.ToLower().Contains(queryLower)))
-            .ToList();
 
-        var totalResults = filteredUsers.Count;
+        var (users, totalResults) = await _unitOfWork.Users.FindPagedAsync(
+            predicate: u => u.Username.ToLower().Contains(queryLower) ||
+                           u.FirstName.ToLower().Contains(queryLower) ||
+                           u.LastName.ToLower().Contains(queryLower),
+            orderBy: q => q.OrderBy(u => u.Username),
+            page: pageNumber,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
+
         var totalPages = (int)Math.Ceiling(totalResults / (double)pageSize);
 
-        // Sayfalama ve DTO'ya çevir (Thread ve Post sayılarıyla birlikte)
-        var results = new List<SearchUserResultDto>();
-
-        var paginatedUsers = filteredUsers
-            .OrderBy(u => u.Username)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
-
-        foreach (var user in paginatedUsers)
+        var results = users.Select(u => new SearchUserResultDto
         {
-            var totalThreads = await _unitOfWork.Threads.CountAsync(
-                t => t.UserId == user.Id && !t.IsDeleted,
-                cancellationToken
-            );
-
-            var totalPosts = await _unitOfWork.Posts.CountAsync(
-                p => p.UserId == user.Id && !p.IsDeleted,
-                cancellationToken
-            );
-
-            results.Add(new SearchUserResultDto
-            {
-                UserId = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Username = user.Username,
-                ProfileImg = user.ProfileImg,
-                Role = user.Role.ToString(),
-                TotalThreads = totalThreads,
-                TotalPosts = totalPosts,
-                CreatedAt = user.CreatedAt
-            });
-        }
+            UserId = u.Id,
+            FirstName = u.FirstName,
+            LastName = u.LastName,
+            Username = u.Username,
+            ProfileImg = u.ProfileImg,
+            Role = u.Role.ToString(),
+            TotalThreads = 0,
+            TotalPosts = 0,
+            CreatedAt = u.CreatedAt
+        }).ToList();
 
         return new SearchResponseDto<SearchUserResultDto>
         {

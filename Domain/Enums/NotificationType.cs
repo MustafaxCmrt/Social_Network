@@ -75,5 +75,10 @@ public enum NotificationType
     /// <summary>
     /// Kulüp rolün değişti (Üyeye)
     /// </summary>
-    ClubRoleChanged = 18
+    ClubRoleChanged = 18,
+    
+    /// <summary>
+    /// Kulüp başkanlığı devredildi (Yeni başkana)
+    /// </summary>
+    ClubPresidencyTransferred = 19
 }

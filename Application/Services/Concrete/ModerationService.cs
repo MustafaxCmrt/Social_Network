@@ -58,9 +58,8 @@ public class ModerationService : IModerationService
         }
 
         // Aktif ban var mı kontrol et
-        var existingBans = await _unitOfWork.UserBans.FindAsync(b => 
-            b.UserId == dto.UserId && b.IsActive);
-        var activeBan = existingBans.FirstOrDefault();
+        var activeBan = await _unitOfWork.UserBans.FirstOrDefaultAsync(
+            b => b.UserId == dto.UserId && b.IsActive);
 
         if (activeBan != null)
         {
@@ -125,9 +124,8 @@ public class ModerationService : IModerationService
         }
 
         // Aktif ban bul
-        var existingBans = await _unitOfWork.UserBans.FindAsync(b => 
-            b.UserId == userId && b.IsActive);
-        var activeBan = existingBans.FirstOrDefault();
+        var activeBan = await _unitOfWork.UserBans.FirstOrDefaultAsync(
+            b => b.UserId == userId && b.IsActive);
 
         if (activeBan == null)
         {
@@ -190,9 +188,8 @@ public class ModerationService : IModerationService
         }
 
         // Aktif mute var mı kontrol et
-        var existingMutes = await _unitOfWork.UserMutes.FindAsync(m => 
-            m.UserId == dto.UserId && m.IsActive);
-        var activeMute = existingMutes.FirstOrDefault();
+        var activeMute = await _unitOfWork.UserMutes.FirstOrDefaultAsync(
+            m => m.UserId == dto.UserId && m.IsActive);
 
         if (activeMute != null)
         {
@@ -255,9 +252,8 @@ public class ModerationService : IModerationService
         }
 
         // Aktif mute bul
-        var existingMutes = await _unitOfWork.UserMutes.FindAsync(m => 
-            m.UserId == userId && m.IsActive);
-        var activeMute = existingMutes.FirstOrDefault();
+        var activeMute = await _unitOfWork.UserMutes.FirstOrDefaultAsync(
+            m => m.UserId == userId && m.IsActive);
 
         if (activeMute == null)
         {
@@ -387,15 +383,9 @@ public class ModerationService : IModerationService
 
     public async Task<(bool IsBanned, UserBanDto? ActiveBan)> IsUserBannedAsync(int userId)
     {
-        var existingBans = await _unitOfWork.UserBans.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(b => b.User)
-                .Include(b => b.BannedByUser));
-
         // Süresi dolmuş ama hala aktif olan ban'ları otomatik pasif yap
-        var expiredBans = existingBans
-            .Where(b => b.IsActive && b.ExpiresAt.HasValue && b.ExpiresAt <= DateTime.UtcNow)
-            .ToList();
+        var expiredBans = (await _unitOfWork.UserBans.FindAsync(
+            b => b.UserId == userId && b.IsActive && b.ExpiresAt.HasValue && b.ExpiresAt <= DateTime.UtcNow)).ToList();
 
         if (expiredBans.Any())
         {
@@ -406,15 +396,19 @@ public class ModerationService : IModerationService
                 _unitOfWork.UserBans.Update(expiredBan);
             }
             await _unitOfWork.SaveChangesAsync();
-            _logger.LogInformation("{Count} expired ban(s) automatically deactivated for user {UserId}", 
+            _logger.LogInformation("{Count} expired ban(s) automatically deactivated for user {UserId}",
                 expiredBans.Count, userId);
         }
 
         // Artık sadece süresi dolmamış ve aktif olan ban'ı bul
-        var activeBan = existingBans
-            .Where(b => b.UserId == userId && b.IsActive)
-            .Where(b => b.ExpiresAt == null || b.ExpiresAt > DateTime.UtcNow) // Süresi dolmamış veya kalıcı
-            .FirstOrDefault();
+        var activeBan = await _unitOfWork.UserBans.FirstOrDefaultWithIncludesAsync(
+            predicate: b =>
+                b.UserId == userId
+                && b.IsActive
+                && (b.ExpiresAt == null || b.ExpiresAt > DateTime.UtcNow),
+            include: query => query
+                .Include(b => b.User)
+                .Include(b => b.BannedByUser));
 
         if (activeBan == null)
         {
@@ -439,15 +433,9 @@ public class ModerationService : IModerationService
 
     public async Task<(bool IsMuted, UserMuteDto? ActiveMute)> IsUserMutedAsync(int userId)
     {
-        var existingMutes = await _unitOfWork.UserMutes.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(m => m.User)
-                .Include(m => m.MutedByUser));
-
         // Süresi dolmuş ama hala aktif olan mute'ları otomatik pasif yap
-        var expiredMutes = existingMutes
-            .Where(m => m.IsActive && m.ExpiresAt <= DateTime.UtcNow)
-            .ToList();
+        var expiredMutes = (await _unitOfWork.UserMutes.FindAsync(
+            m => m.UserId == userId && m.IsActive && m.ExpiresAt <= DateTime.UtcNow)).ToList();
 
         if (expiredMutes.Any())
         {
@@ -458,15 +446,19 @@ public class ModerationService : IModerationService
                 _unitOfWork.UserMutes.Update(expiredMute);
             }
             await _unitOfWork.SaveChangesAsync();
-            _logger.LogInformation("{Count} expired mute(s) automatically deactivated for user {UserId}", 
+            _logger.LogInformation("{Count} expired mute(s) automatically deactivated for user {UserId}",
                 expiredMutes.Count, userId);
         }
 
         // Artık sadece süresi dolmamış ve aktif olan mute'u bul
-        var activeMute = existingMutes
-            .Where(m => m.UserId == userId && m.IsActive)
-            .Where(m => m.ExpiresAt > DateTime.UtcNow) // Süresi dolmamış
-            .FirstOrDefault();
+        var activeMute = await _unitOfWork.UserMutes.FirstOrDefaultWithIncludesAsync(
+            predicate: m =>
+                m.UserId == userId
+                && m.IsActive
+                && m.ExpiresAt > DateTime.UtcNow,
+            include: query => query
+                .Include(m => m.User)
+                .Include(m => m.MutedByUser));
 
         if (activeMute == null)
         {
@@ -491,18 +483,13 @@ public class ModerationService : IModerationService
 
     public async Task<PagedResultDto<UserBanDto>> GetUserBanHistoryAsync(int userId, int page = 1, int pageSize = 20)
     {
-        var bans = await _unitOfWork.UserBans.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(b => b.User)
-                .Include(b => b.BannedByUser));
-
-        // Kullanıcının tüm ban'larını al
-        var userBans = bans.Where(b => b.UserId == userId).ToList();
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
 
         // Süresi dolmuş ama hala aktif olan ban'ları otomatik pasif yap
-        var expiredBans = userBans
-            .Where(b => b.IsActive && b.ExpiresAt.HasValue && b.ExpiresAt <= DateTime.UtcNow)
-            .ToList();
+        var expiredBans = (await _unitOfWork.UserBans.FindAsync(
+            b => b.UserId == userId && b.IsActive && b.ExpiresAt.HasValue && b.ExpiresAt <= DateTime.UtcNow)).ToList();
 
         if (expiredBans.Any())
         {
@@ -517,26 +504,29 @@ public class ModerationService : IModerationService
                 expiredBans.Count, userId);
         }
 
-        var totalCount = userBans.Count;
+        var (userBans, totalCount) = await _unitOfWork.UserBans.FindPagedAsync(
+            predicate: b => b.UserId == userId,
+            include: query => query
+                .Include(b => b.User)
+                .Include(b => b.BannedByUser),
+            orderBy: q => q.OrderByDescending(b => b.BannedAt),
+            page: page,
+            pageSize: pageSize);
+
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        var pagedBans = userBans
-            .OrderByDescending(b => b.BannedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(b => new UserBanDto
-            {
-                Id = b.Id,
-                UserId = b.UserId,
-                Username = b.User?.Username ?? string.Empty,
-                BannedByUserId = b.BannedByUserId,
-                BannedByUsername = b.BannedByUser?.Username ?? string.Empty,
-                Reason = b.Reason,
-                BannedAt = b.BannedAt,
-                ExpiresAt = b.ExpiresAt,
-                IsActive = b.IsActive
-            })
-            .ToList();
+        var pagedBans = userBans.Select(b => new UserBanDto
+        {
+            Id = b.Id,
+            UserId = b.UserId,
+            Username = b.User?.Username ?? string.Empty,
+            BannedByUserId = b.BannedByUserId,
+            BannedByUsername = b.BannedByUser?.Username ?? string.Empty,
+            Reason = b.Reason,
+            BannedAt = b.BannedAt,
+            ExpiresAt = b.ExpiresAt,
+            IsActive = b.IsActive
+        }).ToList();
 
         return new PagedResultDto<UserBanDto>
         {
@@ -550,18 +540,13 @@ public class ModerationService : IModerationService
 
     public async Task<PagedResultDto<UserMuteDto>> GetUserMuteHistoryAsync(int userId, int page = 1, int pageSize = 20)
     {
-        var mutes = await _unitOfWork.UserMutes.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(m => m.User)
-                .Include(m => m.MutedByUser));
-
-        // Kullanıcının tüm mute'larını al
-        var userMutes = mutes.Where(m => m.UserId == userId).ToList();
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
 
         // Süresi dolmuş ama hala aktif olan mute'ları otomatik pasif yap
-        var expiredMutes = userMutes
-            .Where(m => m.IsActive && m.ExpiresAt <= DateTime.UtcNow)
-            .ToList();
+        var expiredMutes = (await _unitOfWork.UserMutes.FindAsync(
+            m => m.UserId == userId && m.IsActive && m.ExpiresAt <= DateTime.UtcNow)).ToList();
 
         if (expiredMutes.Any())
         {
@@ -576,26 +561,29 @@ public class ModerationService : IModerationService
                 expiredMutes.Count, userId);
         }
 
-        var totalCount = userMutes.Count;
+        var (userMutes, totalCount) = await _unitOfWork.UserMutes.FindPagedAsync(
+            predicate: m => m.UserId == userId,
+            include: query => query
+                .Include(m => m.User)
+                .Include(m => m.MutedByUser),
+            orderBy: q => q.OrderByDescending(m => m.MutedAt),
+            page: page,
+            pageSize: pageSize);
+
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        var pagedMutes = userMutes
-            .OrderByDescending(m => m.MutedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(m => new UserMuteDto
-            {
-                Id = m.Id,
-                UserId = m.UserId,
-                Username = m.User?.Username ?? string.Empty,
-                MutedByUserId = m.MutedByUserId,
-                MutedByUsername = m.MutedByUser?.Username ?? string.Empty,
-                Reason = m.Reason,
-                MutedAt = m.MutedAt,
-                ExpiresAt = m.ExpiresAt,
-                IsActive = m.IsActive
-            })
-            .ToList();
+        var pagedMutes = userMutes.Select(m => new UserMuteDto
+        {
+            Id = m.Id,
+            UserId = m.UserId,
+            Username = m.User?.Username ?? string.Empty,
+            MutedByUserId = m.MutedByUserId,
+            MutedByUsername = m.MutedByUser?.Username ?? string.Empty,
+            Reason = m.Reason,
+            MutedAt = m.MutedAt,
+            ExpiresAt = m.ExpiresAt,
+            IsActive = m.IsActive
+        }).ToList();
 
         return new PagedResultDto<UserMuteDto>
         {
@@ -614,28 +602,26 @@ public class ModerationService : IModerationService
             return Enumerable.Empty<SearchUserResultDto>();
         }
 
-        var users = await _unitOfWork.Users.GetAllAsync();
         var lowerSearchTerm = searchTerm.ToLower();
 
-        var matchedUsers = users
-            .Where(u => u.Username.ToLower().Contains(lowerSearchTerm) ||
-                       u.FirstName.ToLower().Contains(lowerSearchTerm) ||
-                       u.LastName.ToLower().Contains(lowerSearchTerm))
-            .Take(20) // Maksimum 20 sonuç
-            .Select(u => new SearchUserResultDto
-            {
-                UserId = u.Id,
-                FirstName = u.FirstName,
-                LastName = u.LastName,
-                Username = u.Username,
-                ProfileImg = u.ProfileImg,
-                Role = u.Role.ToString(),
-                TotalThreads = 0, // Performans için şimdilik 0
-                TotalPosts = 0,
-                CreatedAt = u.CreatedAt
-            });
+        var (users, _) = await _unitOfWork.Users.FindPagedAsync(
+            predicate: u => u.Username.ToLower().Contains(lowerSearchTerm) ||
+                           u.FirstName.ToLower().Contains(lowerSearchTerm) ||
+                           u.LastName.ToLower().Contains(lowerSearchTerm),
+            pageSize: 20);
 
-        return matchedUsers;
+        return users.Select(u => new SearchUserResultDto
+        {
+            UserId = u.Id,
+            FirstName = u.FirstName,
+            LastName = u.LastName,
+            Username = u.Username,
+            ProfileImg = u.ProfileImg,
+            Role = u.Role.ToString(),
+            TotalThreads = 0,
+            TotalPosts = 0,
+            CreatedAt = u.CreatedAt
+        });
     }
 
     public async Task<IEnumerable<SearchThreadResultDto>> SearchThreadsAsync(string searchTerm)
@@ -645,32 +631,27 @@ public class ModerationService : IModerationService
             return Enumerable.Empty<SearchThreadResultDto>();
         }
 
-        var threads = await _unitOfWork.Threads.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(t => t.User)
-                .Include(t => t.Category));
-
         var lowerSearchTerm = searchTerm.ToLower();
 
-        var matchedThreads = threads
-            .Where(t => t.Title.ToLower().Contains(lowerSearchTerm))
-            .Take(20) // Maksimum 20 sonuç
-            .Select(t => new SearchThreadResultDto
-            {
-                Id = t.Id,
-                Title = t.Title,
-                Content = t.Content,
-                ViewCount = t.ViewCount,
-                IsSolved = t.IsSolved,
-                PostCount = t.PostCount,
-                UserId = t.UserId,
-                Username = t.User?.Username ?? string.Empty,
-                CategoryId = t.CategoryId,
-                CategoryName = t.Category?.Title ?? string.Empty,
-                CreatedAt = t.CreatedAt,
-                UpdatedAt = t.UpdatedAt
-            });
+        var (threads, _) = await _unitOfWork.Threads.FindPagedAsync(
+            predicate: t => t.Title.ToLower().Contains(lowerSearchTerm),
+            include: query => query.Include(t => t.User).Include(t => t.Category),
+            pageSize: 20);
 
-        return matchedThreads;
+        return threads.Select(t => new SearchThreadResultDto
+        {
+            Id = t.Id,
+            Title = t.Title,
+            Content = t.Content,
+            ViewCount = t.ViewCount,
+            IsSolved = t.IsSolved,
+            PostCount = t.PostCount,
+            UserId = t.UserId,
+            Username = t.User?.Username ?? string.Empty,
+            CategoryId = t.CategoryId,
+            CategoryName = t.Category?.Title ?? string.Empty,
+            CreatedAt = t.CreatedAt,
+            UpdatedAt = t.UpdatedAt
+        });
     }
 }

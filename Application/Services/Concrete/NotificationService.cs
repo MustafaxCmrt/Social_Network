@@ -1,4 +1,4 @@
-using Application.Common.Extensions;
+
 using Application.DTOs.Common;
 using Application.DTOs.Notification;
 using Application.Services.Abstractions;
@@ -29,47 +29,61 @@ public class NotificationService : INotificationService
         bool onlyUnread = false,
         CancellationToken cancellationToken = default)
     {
-        // 1. Kullanıcının bildirimlerini getir (ilişkilerle birlikte)
-        var notifications = await _unitOfWork.Notifications.GetAllWithIncludesAsync(
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+
+        System.Linq.Expressions.Expression<Func<Notifications, bool>> predicate = onlyUnread
+            ? n => n.UserId == userId && !n.IsRead
+            : n => n.UserId == userId;
+
+        var (notifications, totalCount) = await _unitOfWork.Notifications.FindPagedAsync(
+            predicate: predicate,
             include: query => query
-                .Include(n => n.ActorUser)      // Kim yaptı?
-                .Include(n => n.Thread)         // Hangi thread?
-                .Include(n => n.Post)!,         // Hangi post? (nullable suppress - Posts opsiyonel olabilir)
-            cancellationToken);
+                .Include(n => n.ActorUser)
+                .Include(n => n.Thread)
+                .Include(n => n.Post)!,
+            orderBy: q => q.OrderByDescending(n => n.CreatedAt),
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
 
-        // 2. Kullanıcıya ait olanları filtrele
-        var userNotifications = notifications
-            .Where(n => n.UserId == userId)
-            .AsQueryable();
-
-        // 3. Sadece okunmamışlar isteniyorsa filtrele
-        if (onlyUnread)
+        return new PagedResultDto<NotificationDto>
         {
-            userNotifications = userNotifications.Where(n => !n.IsRead);
-        }
-
-        // 4. Tarihe göre sırala (en yeni en üstte)
-        var ordered = userNotifications.OrderByDescending(n => n.CreatedAt);
-
-        // 5. Sayfalama ve DTO'ya dönüştürme (PaginationExtensions kullanarak)
-        return ordered.ToPagedResult(page, pageSize, MapToDto);
+            Items = notifications.Select(MapToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
     }
 
     public async Task<NotificationSummaryDto> GetNotificationSummaryAsync(
         int userId,
         CancellationToken cancellationToken = default)
     {
-        var notifications = await _unitOfWork.Notifications.GetAllAsync(cancellationToken);
+        var unreadCount = await _unitOfWork.Notifications.CountAsync(
+            n => n.UserId == userId && !n.IsRead,
+            cancellationToken);
 
-        var userNotifications = notifications.Where(n => n.UserId == userId).ToList();
+        var totalCount = await _unitOfWork.Notifications.CountAsync(
+            n => n.UserId == userId,
+            cancellationToken);
+
+        var (lastNotifications, _) = await _unitOfWork.Notifications.FindPagedAsync(
+            predicate: n => n.UserId == userId,
+            orderBy: q => q.OrderByDescending(n => n.CreatedAt),
+            page: 1,
+            pageSize: 1,
+            cancellationToken: cancellationToken);
+
+        var lastNotificationDate = lastNotifications.FirstOrDefault()?.CreatedAt;
 
         return new NotificationSummaryDto
         {
-            UnreadCount = userNotifications.Count(n => !n.IsRead),
-            TotalCount = userNotifications.Count,
-            LastNotificationDate = userNotifications
-                .OrderByDescending(n => n.CreatedAt)
-                .FirstOrDefault()?.CreatedAt
+            UnreadCount = unreadCount,
+            TotalCount = totalCount,
+            LastNotificationDate = lastNotificationDate
         };
     }
 
@@ -112,11 +126,9 @@ public class NotificationService : INotificationService
         int userId,
         CancellationToken cancellationToken = default)
     {
-        // 1. Kullanıcının okunmamış bildirimlerini getir
-        var notifications = await _unitOfWork.Notifications.GetAllAsync(cancellationToken);
-        var unreadNotifications = notifications
-            .Where(n => n.UserId == userId && !n.IsRead)
-            .ToList();
+        var unreadNotifications = (await _unitOfWork.Notifications.FindAsync(
+            n => n.UserId == userId && !n.IsRead,
+            cancellationToken)).ToList();
 
         if (!unreadNotifications.Any())
             return 0;
@@ -125,8 +137,9 @@ public class NotificationService : INotificationService
         foreach (var notification in unreadNotifications)
         {
             notification.IsRead = true;
-            _unitOfWork.Notifications.Update(notification);
         }
+
+        _unitOfWork.Notifications.UpdateRange(unreadNotifications);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

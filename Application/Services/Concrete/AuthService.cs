@@ -49,17 +49,20 @@ public class AuthService : IAuthService
     /// </summary>
     public async Task<RegisterResponseDto?> RegisterAsync(RegisterRequestDto request, CancellationToken cancellationToken = default)
     {
-        // 1. Username zaten kullanılıyor mu kontrol et (CASE-SENSITIVE - GÜVENLİK)
-        var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
-        var usernameExists = allUsers.Any(u => 
-            u.Username.Equals(request.Username, StringComparison.Ordinal) && !u.IsDeleted);
+        // 1. Username zaten kullanılıyor mu kontrol et
+        // Not: Case-sensitivity DB collation'a bağlıdır. Burada DB tarafında eşitlik kontrolü yapılır.
+        var usernameExists = await _unitOfWork.Users.AnyAsync(
+            u => !u.IsDeleted && u.Username == request.Username,
+            cancellationToken);
 
         if (usernameExists)
             return null; // Username zaten kullanılıyor
 
-        // 2. Email zaten kullanılıyor mu kontrol et (case-insensitive - RFC standardı)
-        var emailExists = allUsers.Any(u => 
-            u.Email.Equals(request.Email, StringComparison.OrdinalIgnoreCase) && !u.IsDeleted);
+        // 2. Email zaten kullanılıyor mu kontrol et (case-insensitive)
+        var normalizedEmail = request.Email.Trim().ToLower();
+        var emailExists = await _unitOfWork.Users.AnyAsync(
+            u => !u.IsDeleted && u.Email.ToLower() == normalizedEmail,
+            cancellationToken);
 
         if (emailExists)
             return null; // Email zaten kullanılıyor
@@ -136,12 +139,16 @@ public class AuthService : IAuthService
     /// </summary>
     public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
     {
-        // 1. Kullanıcıyı bul (Email veya Username ile) - USERNAME CASE-SENSITIVE!
-        var allUsers = await _unitOfWork.Users.GetAllAsync(cancellationToken);
-        var user = allUsers.FirstOrDefault(u => !u.IsDeleted && (
-            u.Email.Equals(request.UsernameOrEmail, StringComparison.OrdinalIgnoreCase) || // Email case-insensitive
-            u.Username.Equals(request.UsernameOrEmail, StringComparison.Ordinal) // Username CASE-SENSITIVE
-        ));
+        // 1. Kullanıcıyı bul (Email veya Username ile)
+        // Not: Username case-sensitivity DB collation'a bağlıdır.
+        var loginInput = request.UsernameOrEmail.Trim();
+        var loginEmailLower = loginInput.ToLower();
+
+        var user = await _unitOfWork.Users.FirstOrDefaultAsync(
+            u => !u.IsDeleted && (
+                u.Email.ToLower() == loginEmailLower ||
+                u.Username == loginInput),
+            cancellationToken);
 
         // 2. Şifre kontrolü (BCrypt ile hash karşılaştırması)
         // GÜVENLIK: Kullanıcı bulunamasa bile BCrypt.Verify çalıştırarak timing attack'ı önle

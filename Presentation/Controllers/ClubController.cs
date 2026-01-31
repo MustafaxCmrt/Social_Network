@@ -101,7 +101,7 @@ public class ClubController : AppController
             var result = await _clubService.GetPendingClubRequestsAsync(page, pageSize, cancellationToken);
             return Ok(result);
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -162,7 +162,7 @@ public class ClubController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -252,7 +252,7 @@ public class ClubController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -275,7 +275,7 @@ public class ClubController : AppController
 
             return NoContent();
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -310,7 +310,7 @@ public class ClubController : AppController
         {
             return NotFound(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -345,7 +345,7 @@ public class ClubController : AppController
         {
             return NotFound(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -440,7 +440,7 @@ public class ClubController : AppController
             var result = await _clubService.GetPendingMembersAsync(clubId, page, pageSize, cancellationToken);
             return Ok(result);
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -478,7 +478,7 @@ public class ClubController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -516,7 +516,7 @@ public class ClubController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -554,7 +554,7 @@ public class ClubController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
@@ -578,7 +578,7 @@ public class ClubController : AppController
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }

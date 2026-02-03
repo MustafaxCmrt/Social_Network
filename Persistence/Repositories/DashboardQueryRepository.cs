@@ -28,29 +28,35 @@ public class DashboardQueryRepository : IDashboardQueryRepository
         var userReports = _context.Reports
             .Where(r => r.ReportedUserId.HasValue)
             .GroupBy(r => r.ReportedUserId!.Value)
-            .Select(g => new TopReportedContentRow(
-                "User",
-                g.Key,
-                g.Count(),
-                g.Max(r => r.CreatedAt)));
+            .Select(g => new
+            {
+                ContentType = "User",
+                ContentId = g.Key,
+                ReportCount = g.Count(),
+                LastReportedAt = g.Max(r => r.CreatedAt)
+            });
 
         var threadReports = _context.Reports
             .Where(r => r.ReportedThreadId.HasValue)
             .GroupBy(r => r.ReportedThreadId!.Value)
-            .Select(g => new TopReportedContentRow(
-                "Thread",
-                g.Key,
-                g.Count(),
-                g.Max(r => r.CreatedAt)));
+            .Select(g => new
+            {
+                ContentType = "Thread",
+                ContentId = g.Key,
+                ReportCount = g.Count(),
+                LastReportedAt = g.Max(r => r.CreatedAt)
+            });
 
         var postReports = _context.Reports
             .Where(r => r.ReportedPostId.HasValue)
             .GroupBy(r => r.ReportedPostId!.Value)
-            .Select(g => new TopReportedContentRow(
-                "Post",
-                g.Key,
-                g.Count(),
-                g.Max(r => r.CreatedAt)));
+            .Select(g => new
+            {
+                ContentType = "Post",
+                ContentId = g.Key,
+                ReportCount = g.Count(),
+                LastReportedAt = g.Max(r => r.CreatedAt)
+            });
 
         return await userReports
             .Concat(threadReports)
@@ -58,6 +64,11 @@ public class DashboardQueryRepository : IDashboardQueryRepository
             .OrderByDescending(x => x.ReportCount)
             .ThenByDescending(x => x.LastReportedAt)
             .Take(topCount)
+            .Select(x => new TopReportedContentRow(
+                x.ContentType,
+                x.ContentId,
+                x.ReportCount,
+                x.LastReportedAt))
             .ToListAsync(cancellationToken);
     }
 

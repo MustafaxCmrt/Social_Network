@@ -57,13 +57,15 @@ public class ThreadService : IThreadService
 
         var queryLower = string.IsNullOrWhiteSpace(q) ? null : q.Trim().ToLower();
 
+        // ÖNEMLI: Kulüp thread'lerini gizle (ClubId == null olanlar normal forum thread'leri)
         Expression<Func<Threads, bool>>? predicate = t =>
             (queryLower == null
              || (t.Title != null && t.Title.ToLower().Contains(queryLower))
              || (t.Content != null && t.Content.ToLower().Contains(queryLower)))
             && (!categoryId.HasValue || t.CategoryId == categoryId.Value)
             && (!isSolved.HasValue || t.IsSolved == isSolved.Value)
-            && (!userId.HasValue || t.UserId == userId.Value);
+            && (!userId.HasValue || t.UserId == userId.Value)
+            && t.ClubId == null; // Sadece normal forum thread'leri (kulüp thread'leri hariç)
 
         Func<IQueryable<Threads>, IOrderedQueryable<Threads>> orderBy = normalizedSortBy.ToLowerInvariant() switch
         {
@@ -121,7 +123,7 @@ public class ThreadService : IThreadService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
-        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        // MODERASYON: Kullanıcı ban'lı mı kontrol et
         var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
         if (isBanned && activeBan != null)
         {
@@ -133,6 +135,42 @@ public class ThreadService : IThreadService
         if (category == null)
         {
             throw new KeyNotFoundException($"Kategori ID: {createThreadDto.CategoryId} bulunamadı.");
+        }
+        
+        // ÖNEMLI: Kulüp thread'i ise kategori de kulübe ait olmalı
+        if (createThreadDto.ClubId.HasValue)
+        {
+            if (category.ClubId != createThreadDto.ClubId.Value)
+            {
+                throw new InvalidOperationException("Seçilen kategori bu kulübe ait değil.");
+            }
+            
+            // Kulüp var mı kontrol et
+            var club = await _unitOfWork.Clubs.GetByIdAsync(createThreadDto.ClubId.Value, cancellationToken);
+            if (club == null)
+            {
+                throw new KeyNotFoundException($"Kulüp ID: {createThreadDto.ClubId.Value} bulunamadı.");
+            }
+            
+            // Kullanıcı kulüp üyesi mi kontrol et
+            var membership = await _unitOfWork.ClubMemberships.FirstOrDefaultAsync(
+                m => m.ClubId == createThreadDto.ClubId.Value 
+                    && m.UserId == currentUserId.Value 
+                    && m.Status == Domain.Enums.MembershipStatus.Approved,
+                cancellationToken);
+            
+            if (membership == null)
+            {
+                throw new UnauthorizedAccessException("Bu kulüpte konu açmak için üye olmalısınız.");
+            }
+        }
+        else
+        {
+            // Normal forum thread'i ise kategori de normal olmalı (ClubId == null)
+            if (category.ClubId != null)
+            {
+                throw new InvalidOperationException("Seçilen kategori bir kulübe ait, normal forum kategorisi seçmelisiniz.");
+            }
         }
 
         // 🔇 MODERASYON: Kullanıcı mute'lu mu kontrol et
@@ -148,6 +186,7 @@ public class ThreadService : IThreadService
             Title = createThreadDto.Title,
             Content = createThreadDto.Content,
             CategoryId = createThreadDto.CategoryId,
+            ClubId = createThreadDto.ClubId, // ÖNEMLI: ClubId'yi set et
             UserId = currentUserId.Value,
             ViewCount = 0,
             IsSolved = false
@@ -167,7 +206,7 @@ public class ThreadService : IThreadService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
-        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        // MODERASYON: Kullanıcı ban'lı mı kontrol et
         var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
         if (isBanned && activeBan != null)
         {
@@ -218,7 +257,7 @@ public class ThreadService : IThreadService
             throw new UnauthorizedAccessException("Oturum bilgisi bulunamadı.");
         }
 
-        // 🚫 MODERASYON: Kullanıcı ban'lı mı kontrol et
+        // MODERASYON: Kullanıcı ban'lı mı kontrol et
         var (isBanned, activeBan) = await _moderationService.IsUserBannedAsync(currentUserId.Value);
         if (isBanned && activeBan != null)
         {

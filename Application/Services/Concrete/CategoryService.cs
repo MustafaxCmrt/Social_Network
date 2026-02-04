@@ -23,7 +23,10 @@ public class CategoryService : ICategoryService
     public async Task<IEnumerable<CategoryDto>> GetAllCategoriesAsync(CancellationToken cancellationToken = default)
     {
         // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
-        var categories = (await _unitOfWork.Categories.GetAllAsync(cancellationToken: cancellationToken)).ToList();
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri
+        var categories = (await _unitOfWork.Categories.FindAsync(
+            predicate: c => c.ClubId == null,
+            cancellationToken: cancellationToken)).ToList();
         
         // SubCategory COUNT'ları RAM'de hesapla (kategori sayısı az)
         var subCategoryCounts = categories
@@ -38,8 +41,9 @@ public class CategoryService : ICategoryService
         
         foreach (var c in categories.OrderByDescending(c => c.CreatedAt))
         {
+            // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
             var threadCount = await _unitOfWork.Threads.CountAsync(
-                t => t.CategoryId == c.Id,
+                t => t.CategoryId == c.Id && t.ClubId == null,
                 cancellationToken);
             
             result.Add(new CategoryDto
@@ -75,6 +79,7 @@ public class CategoryService : ICategoryService
         var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLower();
 
         // PERFORMANS OPTİMİZASYONU: Include kaldırıldı - N+1 query sorunu çözüldü
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri (kulüp kategorileri hariç)
         var (categories, totalCount) = await _unitOfWork.Categories.FindPagedAsync(
             predicate: c =>
                 (normalizedSearch == null
@@ -86,7 +91,8 @@ public class CategoryService : ICategoryService
                             ? c.ParentCategoryId == null
                             : c.ParentCategoryId == parentCategoryId.Value)
                         : c.ParentCategoryId == null
-                ),
+                )
+                && c.ClubId == null, // Sadece normal forum kategorileri
             include: null, // Include kaldırıldı - performans optimizasyonu
             orderBy: q => q.OrderByDescending(c => c.CreatedAt),
             page: page,
@@ -101,8 +107,9 @@ public class CategoryService : ICategoryService
         foreach (var c in categories)
         {
             // Her kategori için ayrı COUNT query (pagination olduğu için genelde 10-50 kategori max)
+            // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
             var threadCount = await _unitOfWork.Threads.CountAsync(
-                t => t.CategoryId == c.Id,
+                t => t.CategoryId == c.Id && t.ClubId == null,
                 cancellationToken);
             
             var subCategoryCount = await _unitOfWork.Categories.CountAsync(
@@ -138,16 +145,18 @@ public class CategoryService : ICategoryService
     public async Task<CategoryDto?> GetCategoryByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri
         var category = await _unitOfWork.Categories.FirstOrDefaultAsync(
-            predicate: c => c.Id == id,
+            predicate: c => c.Id == id && c.ClubId == null,
             cancellationToken);
 
         if (category == null)
             return null;
 
         // COUNT'ları ayrı sorgularla al
+        // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
         var threadCount = await _unitOfWork.Threads.CountAsync(
-            t => t.CategoryId == id,
+            t => t.CategoryId == id && t.ClubId == null,
             cancellationToken);
         
         var subCategoryCount = await _unitOfWork.Categories.CountAsync(
@@ -173,16 +182,18 @@ public class CategoryService : ICategoryService
     public async Task<CategoryDto?> GetCategoryBySlugAsync(string slug, CancellationToken cancellationToken = default)
     {
         // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri
         var category = await _unitOfWork.Categories.FirstOrDefaultAsync(
-            predicate: c => c.Slug == slug,
+            predicate: c => c.Slug == slug && c.ClubId == null,
             cancellationToken);
 
         if (category == null)
             return null;
 
         // COUNT'ları ayrı sorgularla al
+        // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
         var threadCount = await _unitOfWork.Threads.CountAsync(
-            t => t.CategoryId == category.Id,
+            t => t.CategoryId == category.Id && t.ClubId == null,
             cancellationToken);
         
         var subCategoryCount = await _unitOfWork.Categories.CountAsync(
@@ -430,7 +441,10 @@ public class CategoryService : ICategoryService
     public async Task<List<CategoryTreeDto>> GetCategoryTreeAsync(CancellationToken cancellationToken = default)
     {
         // PERFORMANS: Tree için tüm kategorileri çekmek gerekli
-        var allCategoriesList = (await _unitOfWork.Categories.GetAllAsync(cancellationToken: cancellationToken)).ToList();
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri
+        var allCategoriesList = (await _unitOfWork.Categories.FindAsync(
+            predicate: c => c.ClubId == null,
+            cancellationToken: cancellationToken)).ToList();
         
         // SubCategory COUNT'ları RAM'de hesapla (hızlı)
         var subCategoryCounts = allCategoriesList
@@ -440,11 +454,12 @@ public class CategoryService : ICategoryService
         
         // Thread COUNT'ları için her kategori için ayrı query
         // TODO: Bu kısım raw SQL ile optimize edilebilir (SELECT CategoryId, COUNT(*) FROM Threads GROUP BY CategoryId)
+        // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
         var threadCountsDict = new Dictionary<int, int>();
         foreach (var category in allCategoriesList)
         {
             var count = await _unitOfWork.Threads.CountAsync(
-                t => t.CategoryId == category.Id,
+                t => t.CategoryId == category.Id && t.ClubId == null,
                 cancellationToken);
             threadCountsDict[category.Id] = count;
         }
@@ -461,8 +476,9 @@ public class CategoryService : ICategoryService
     public async Task<IEnumerable<CategoryDto>> GetSubCategoriesAsync(int parentId, CancellationToken cancellationToken = default)
     {
         // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri
         var categories = (await _unitOfWork.Categories.FindAsync(
-            predicate: c => c.ParentCategoryId == parentId,
+            predicate: c => c.ParentCategoryId == parentId && c.ClubId == null,
             cancellationToken: cancellationToken)).ToList();
         
         if (!categories.Any())
@@ -473,8 +489,9 @@ public class CategoryService : ICategoryService
         
         foreach (var c in categories)
         {
+            // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
             var threadCount = await _unitOfWork.Threads.CountAsync(
-                t => t.CategoryId == c.Id,
+                t => t.CategoryId == c.Id && t.ClubId == null,
                 cancellationToken);
             
             var subCategoryCount = await _unitOfWork.Categories.CountAsync(
@@ -503,8 +520,9 @@ public class CategoryService : ICategoryService
     public async Task<IEnumerable<CategoryDto>> GetRootCategoriesAsync(CancellationToken cancellationToken = default)
     {
         // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        // ÖNEMLI: ClubId == null filtresi - sadece normal forum kategorileri
         var categories = (await _unitOfWork.Categories.FindAsync(
-            predicate: c => c.ParentCategoryId == null,
+            predicate: c => c.ParentCategoryId == null && c.ClubId == null,
             cancellationToken: cancellationToken)).ToList();
         
         if (!categories.Any())
@@ -515,8 +533,9 @@ public class CategoryService : ICategoryService
         
         foreach (var c in categories)
         {
+            // ÖNEMLI: Sadece normal forum thread'lerini say (ClubId == null)
             var threadCount = await _unitOfWork.Threads.CountAsync(
-                t => t.CategoryId == c.Id,
+                t => t.CategoryId == c.Id && t.ClubId == null,
                 cancellationToken);
             
             var subCategoryCount = await _unitOfWork.Categories.CountAsync(
@@ -618,6 +637,143 @@ public class CategoryService : ICategoryService
             
             // Alt kategoriyi sil
             _unitOfWork.Categories.Delete(child);
+        }
+    }
+    
+    // Kulüp Kategorileri Metodları
+    
+    /// <summary>
+    /// Belirli bir kulübün kategorilerini getirir
+    /// </summary>
+    public async Task<IEnumerable<CategoryDto>> GetClubCategoriesAsync(int clubId, CancellationToken cancellationToken = default)
+    {
+        // ÖNEMLI: ClubId == clubId filtresi - sadece bu kulübün kategorileri
+        var categories = (await _unitOfWork.Categories.FindAsync(
+            predicate: c => c.ClubId == clubId,
+            cancellationToken: cancellationToken)).ToList();
+        
+        if (!categories.Any())
+            return Enumerable.Empty<CategoryDto>();
+        
+        // SubCategory COUNT'ları RAM'de hesapla
+        var subCategoryCounts = categories
+            .Where(c => c.ParentCategoryId.HasValue)
+            .GroupBy(c => c.ParentCategoryId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+        
+        // Thread COUNT'ları için her kategori için ayrı query
+        var result = new List<CategoryDto>();
+        
+        foreach (var c in categories.OrderBy(x => x.Title))
+        {
+            // Kulüp kategorilerinde ClubId filtresi de olmalı
+            var threadCount = await _unitOfWork.Threads.CountAsync(
+                t => t.CategoryId == c.Id && t.ClubId == clubId,
+                cancellationToken);
+            
+            var subCategoryCount = subCategoryCounts.GetValueOrDefault(c.Id, 0);
+            
+            result.Add(new CategoryDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Slug = c.Slug,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                CreatedUserId = c.CreatedUserId,
+                UpdatedUserId = c.UpdatedUserId,
+                ThreadCount = threadCount,
+                ParentCategoryId = c.ParentCategoryId,
+                SubCategoryCount = subCategoryCount
+            });
+        }
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Kulüp için yeni kategori oluşturur
+    /// </summary>
+    public async Task<CategoryDto> CreateClubCategoryAsync(int clubId, CreateCategoryDto createCategoryDto, CancellationToken cancellationToken = default)
+    {
+        // Kulüp var mı kontrol et
+        var club = await _unitOfWork.Clubs.GetByIdAsync(clubId, cancellationToken);
+        if (club == null)
+        {
+            throw new KeyNotFoundException($"ID: {clubId} olan kulüp bulunamadı.");
+        }
+        
+        // Slug oluştur
+        var slug = GenerateSlug(createCategoryDto.Title);
+
+        // Aynı kulüp içinde aynı slug var mı kontrol et
+        var existingCategory = await _unitOfWork.Categories.FirstOrDefaultAsync(
+            c => c.Slug.ToLower() == slug.ToLower() && c.ClubId == clubId, 
+            cancellationToken);
+
+        if (existingCategory != null)
+        {
+            throw new InvalidOperationException($"Bu kulüpte '{createCategoryDto.Title}' başlıklı kategori zaten mevcut.");
+        }
+        
+        // ParentCategory kontrolü (eğer belirtilmişse, aynı kulüpte olmalı)
+        if (createCategoryDto.ParentCategoryId.HasValue)
+        {
+            var parentCategory = await _unitOfWork.Categories.FirstOrDefaultAsync(
+                c => c.Id == createCategoryDto.ParentCategoryId.Value && c.ClubId == clubId,
+                cancellationToken);
+            
+            if (parentCategory == null)
+            {
+                throw new InvalidOperationException("Üst kategori bu kulübe ait değil veya bulunamadı.");
+            }
+        }
+
+        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var category = new Categories
+            {
+                Title = createCategoryDto.Title,
+                Slug = slug,
+                Description = createCategoryDto.Description,
+                ParentCategoryId = createCategoryDto.ParentCategoryId,
+                ClubId = clubId // ÖNEMLI: ClubId'yi set et
+            };
+
+            await _unitOfWork.Categories.CreateAsync(category, cancellationToken);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+
+            // Audit log kaydet
+            await _auditLogService.CreateLogAsync(new CreateAuditLogDto
+            {
+                Action = "CreateClubCategory",
+                EntityType = "Category",
+                EntityId = category.Id,
+                NewValue = $"ClubId: {clubId}, Title: {category.Title}, Slug: {category.Slug}",
+                Success = true
+            }, cancellationToken);
+
+            return new CategoryDto
+            {
+                Id = category.Id,
+                Title = category.Title,
+                Slug = category.Slug,
+                Description = category.Description,
+                CreatedAt = category.CreatedAt,
+                UpdatedAt = category.UpdatedAt,
+                CreatedUserId = category.CreatedUserId,
+                UpdatedUserId = category.UpdatedUserId,
+                ThreadCount = 0,
+                ParentCategoryId = category.ParentCategoryId,
+                SubCategoryCount = 0
+            };
+        }
+        catch
+        {
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
         }
     }
 }

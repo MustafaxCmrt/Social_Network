@@ -60,6 +60,14 @@ public class CategoriesConfiguration : IEntityTypeConfiguration<Categories>
         
         builder.HasIndex(c => c.ParentCategoryId)
             .HasDatabaseName("IX_Categories_ParentCategoryId");
+        
+        // PERFORMANS: ClubId index (kulüp kategorilerini hızlı bulmak için)
+        builder.HasIndex(c => c.ClubId)
+            .HasDatabaseName("IX_Categories_ClubId");
+        
+        // Composite index: ClubId + IsDeleted (kulüp kategorilerini çekerken soft delete filtresi ile birlikte)
+        builder.HasIndex(c => new { c.ClubId, c.IsDeleted })
+            .HasDatabaseName("IX_Categories_ClubId_IsDeleted");
 
         // Relationships
         
@@ -69,6 +77,13 @@ public class CategoriesConfiguration : IEntityTypeConfiguration<Categories>
             .HasForeignKey(c => c.ParentCategoryId)
             .OnDelete(DeleteBehavior.Restrict) // Üst kategori silindiğinde alt kategoriler korunsun
             .IsRequired(false);
+        
+        // Kulüp ilişkisi (Kulüp kategorileri için)
+        builder.HasOne(c => c.Club)
+            .WithMany() // Clubs entity'sinde Categories collection'ı yoksa WithMany() boş kalabilir
+            .HasForeignKey(c => c.ClubId)
+            .OnDelete(DeleteBehavior.Cascade) // Kulüp silindiğinde kategorileri de sil
+            .IsRequired(false); // Nullable (normal forum kategorileri için null)
         
         builder.HasMany(c => c.Threads)
             .WithOne(t => t.Category)

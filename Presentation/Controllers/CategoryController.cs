@@ -183,4 +183,38 @@ public class CategoryController : AppController
         var rootCategories = await _categoryService.GetRootCategoriesAsync(cancellationToken);
         return Ok(rootCategories);
     }
+    
+    // GET: api/Category/club/{clubId}
+    /// <summary>
+    /// Belirli bir kulübün kategorilerini getirir
+    /// </summary>
+    /// <param name="clubId">Kulüp ID</param>
+    [HttpGet("club/{clubId}")]
+    [Authorize]
+    public async Task<IActionResult> GetClubCategories(int clubId, CancellationToken cancellationToken)
+    {
+        var categories = await _categoryService.GetClubCategoriesAsync(clubId, cancellationToken);
+        return Ok(categories);
+    }
+    
+    // POST: api/Category/club/{clubId}
+    /// <summary>
+    /// Kulüp için yeni kategori oluşturur (Sadece kulüp yöneticileri)
+    /// </summary>
+    /// <param name="clubId">Kulüp ID</param>
+    /// <param name="createCategoryDto">Kategori bilgileri</param>
+    [HttpPost("club/{clubId}")]
+    [Authorize]
+    public async Task<IActionResult> CreateClubCategory(
+        int clubId,
+        [FromBody] CreateCategoryDto createCategoryDto,
+        CancellationToken cancellationToken)
+    {
+        // TODO: Kulüp yöneticisi kontrolü eklenebilir
+        // var isAdmin = await _clubService.IsClubAdminAsync(clubId, currentUserId);
+        // if (!isAdmin) return Forbid();
+        
+        var category = await _categoryService.CreateClubCategoryAsync(clubId, createCategoryDto, cancellationToken);
+        return CreatedAtAction(nameof(GetCategoryById), new { id = category.Id }, category);
+    }
 }

@@ -22,4 +22,8 @@ public interface ICategoryService
     Task<List<CategoryTreeDto>> GetCategoryTreeAsync(CancellationToken cancellationToken = default);
     Task<IEnumerable<CategoryDto>> GetSubCategoriesAsync(int parentId, CancellationToken cancellationToken = default);
     Task<IEnumerable<CategoryDto>> GetRootCategoriesAsync(CancellationToken cancellationToken = default);
+    
+    // Kulüp Kategorileri
+    Task<IEnumerable<CategoryDto>> GetClubCategoriesAsync(int clubId, CancellationToken cancellationToken = default);
+    Task<CategoryDto> CreateClubCategoryAsync(int clubId, CreateCategoryDto createCategoryDto, CancellationToken cancellationToken = default);
 }

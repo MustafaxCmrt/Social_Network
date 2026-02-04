@@ -276,6 +276,72 @@ public class ClubService : IClubService
 
     // ==================== KULÜP CRUD İŞLEMLERİ ====================
 
+    public async Task<ClubDto> CreateClubDirectAsync(CreateClubDto dto, CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUserService.GetCurrentUserId()
+            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
+
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+        if (user == null || user.Role != Roles.Admin)
+            throw new UnauthorizedAccessException("Bu işlem için admin yetkisi gerekiyor");
+
+        // Aynı isimde kulüp var mı kontrol et
+        var slug = GenerateSlug(dto.Name);
+        var existingClub = await _unitOfWork.Clubs.FirstOrDefaultAsync(
+            c => c.Name.ToLower() == dto.Name.ToLower() || c.Slug == slug,
+            cancellationToken);
+
+        if (existingClub != null)
+            throw new InvalidOperationException("Bu isimde bir kulüp zaten mevcut");
+
+        var club = new Clubs
+        {
+            Name = dto.Name,
+            Slug = slug,
+            Description = dto.Description,
+            IsPublic = dto.IsPublic,
+            RequiresApproval = dto.RequiresApproval,
+            MemberCount = 1,
+            FounderId = userId
+        };
+
+        await _unitOfWork.Clubs.CreateAsync(club, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Admin'i başkan olarak ekle
+        var membership = new ClubMemberships
+        {
+            ClubId = club.Id,
+            UserId = userId,
+            Role = ClubRole.President,
+            Status = MembershipStatus.Approved,
+            JoinedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.ClubMemberships.CreateAsync(membership, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Admin {UserId} tarafından {ClubName} kulübü doğrudan oluşturuldu", userId, club.Name);
+
+        return new ClubDto(
+            club.Id,
+            club.Name,
+            club.Slug,
+            club.Description,
+            club.LogoUrl,
+            club.BannerUrl,
+            club.IsPublic,
+            club.RequiresApproval,
+            club.MemberCount,
+            club.FounderId,
+            user.Username,
+            club.CreatedAt,
+            true,
+            ClubRole.President,
+            MembershipStatus.Approved
+        );
+    }
+
     public async Task<PagedResultDto<ClubListDto>> GetAllClubsAsync(int page, int pageSize, string? search, CancellationToken cancellationToken = default)
     {
         Expression<Func<Clubs, bool>>? predicate = null;
@@ -289,6 +355,7 @@ public class ClubService : IClubService
 
         var (clubs, totalCount) = await _unitOfWork.Clubs.FindPagedAsync(
             predicate: predicate,
+            include: query => query.Include(c => c.Founder),
             orderBy: q => q.OrderBy(c => c.Name),
             page: page,
             pageSize: pageSize,
@@ -301,7 +368,9 @@ public class ClubService : IClubService
             c.Description,
             c.LogoUrl,
             c.MemberCount,
-            c.IsPublic
+            c.IsPublic,
+            c.FounderId,
+            c.Founder?.Username ?? "Bilinmiyor"
         )).ToList();
 
         return new PagedResultDto<ClubListDto>
@@ -391,10 +460,33 @@ public class ClubService : IClubService
         if (!isAdmin && (membership == null || membership.Role != ClubRole.President))
             throw new UnauthorizedAccessException("Bu işlem için başkan veya admin yetkisi gerekiyor");
 
-        if (dto.Description != null)
+        // Name güncellemesi (varsa slug'ı da güncelle)
+        if (!string.IsNullOrWhiteSpace(dto.Name))
+        {
+            // Aynı isimde başka kulüp var mı kontrol et
+            var existingClub = await _unitOfWork.Clubs.FirstOrDefaultAsync(
+                c => c.Name.ToLower() == dto.Name.ToLower() && c.Id != dto.Id,
+                cancellationToken);
+
+            if (existingClub != null)
+                throw new InvalidOperationException("Bu isimde bir kulüp zaten mevcut");
+
+            club.Name = dto.Name;
+            club.Slug = GenerateSlug(dto.Name);
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Description))
             club.Description = dto.Description;
+
+        if (!string.IsNullOrWhiteSpace(dto.LogoUrl))
+            club.LogoUrl = dto.LogoUrl;
+
+        if (!string.IsNullOrWhiteSpace(dto.BannerUrl))
+            club.BannerUrl = dto.BannerUrl;
+
         if (dto.IsPublic.HasValue)
             club.IsPublic = dto.IsPublic.Value;
+
         if (dto.RequiresApproval.HasValue)
             club.RequiresApproval = dto.RequiresApproval.Value;
 

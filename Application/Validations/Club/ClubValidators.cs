@@ -4,6 +4,25 @@ using FluentValidation;
 namespace Application.Validations.Club;
 
 /// <summary>
+/// Kulüp oluşturma validasyonu (Admin - doğrudan oluşturma)
+/// </summary>
+public class CreateClubValidator : AbstractValidator<CreateClubDto>
+{
+    public CreateClubValidator()
+    {
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Kulüp adı boş olamaz")
+            .MinimumLength(3).WithMessage("Kulüp adı en az 3 karakter olmalıdır")
+            .MaximumLength(100).WithMessage("Kulüp adı en fazla 100 karakter olabilir");
+
+        RuleFor(x => x.Description)
+            .NotEmpty().WithMessage("Kulüp açıklaması boş olamaz")
+            .MinimumLength(20).WithMessage("Kulüp açıklaması en az 20 karakter olmalıdır")
+            .MaximumLength(2000).WithMessage("Kulüp açıklaması en fazla 2000 karakter olabilir");
+    }
+}
+
+/// <summary>
 /// Kulüp açma başvurusu validasyonu
 /// </summary>
 public class CreateClubRequestValidator : AbstractValidator<CreateClubRequestDto>

@@ -22,12 +22,13 @@ public class CategoryService : ICategoryService
 
     public async Task<IEnumerable<CategoryDto>> GetAllCategoriesAsync(CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        var categories = (await _unitOfWork.Categories.GetAllWithIncludesAsync(
             include: query => query
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
-            cancellationToken);
+            cancellationToken)).ToList();
         
+        // Sıralama ve mapping RAM'de (kategori sayısı az olduğu için performans etkisi minimal)
         return categories
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new CategoryDto
@@ -386,17 +387,21 @@ public class CategoryService : ICategoryService
     
     public async Task<List<CategoryTreeDto>> GetCategoryTreeAsync(CancellationToken cancellationToken = default)
     {
-        var allCategories = await _unitOfWork.Categories.GetAllWithIncludesAsync(
+        // Tüm kategorileri tek seferde çek (tree yapısı için gerekli)
+        // Include ile ilişkili verileri de getir
+        var allCategoriesList = (await _unitOfWork.Categories.GetAllWithIncludesAsync(
             include: query => query
                 .Include(c => c.Threads)
                 .Include(c => c.SubCategories),
-            cancellationToken);
-
-        // Root kategorileri al (ParentCategoryId == null)
-        var rootCategories = allCategories.Where(c => c.ParentCategoryId == null).ToList();
+            cancellationToken)).ToList();
+        
+        var rootCategories = allCategoriesList
+            .Where(c => c.ParentCategoryId == null)
+            .OrderBy(c => c.Title)
+            .ToList();
 
         // Recursive tree oluştur
-        return rootCategories.Select(c => BuildCategoryTree(c, allCategories.ToList())).ToList();
+        return rootCategories.Select(c => BuildCategoryTree(c, allCategoriesList)).ToList();
     }
 
     public async Task<IEnumerable<CategoryDto>> GetSubCategoriesAsync(int parentId, CancellationToken cancellationToken = default)

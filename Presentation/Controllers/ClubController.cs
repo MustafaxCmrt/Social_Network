@@ -15,6 +15,7 @@ public class ClubController : AppController
 {
     private readonly IClubService _clubService;
     private readonly IFileService _fileService;
+    private readonly IValidator<CreateClubDto> _createClubValidator;
     private readonly IValidator<CreateClubRequestDto> _createClubRequestValidator;
     private readonly IValidator<ReviewClubRequestDto> _reviewClubRequestValidator;
     private readonly IValidator<UpdateClubDto> _updateClubValidator;
@@ -25,6 +26,7 @@ public class ClubController : AppController
     public ClubController(
         IClubService clubService,
         IFileService fileService,
+        IValidator<CreateClubDto> createClubValidator,
         IValidator<CreateClubRequestDto> createClubRequestValidator,
         IValidator<ReviewClubRequestDto> reviewClubRequestValidator,
         IValidator<UpdateClubDto> updateClubValidator,
@@ -34,6 +36,7 @@ public class ClubController : AppController
     {
         _clubService = clubService;
         _fileService = fileService;
+        _createClubValidator = createClubValidator;
         _createClubRequestValidator = createClubRequestValidator;
         _reviewClubRequestValidator = reviewClubRequestValidator;
         _updateClubValidator = updateClubValidator;
@@ -41,13 +44,11 @@ public class ClubController : AppController
         _processMembershipValidator = processMembershipValidator;
         _updateMemberRoleValidator = updateMemberRoleValidator;
     }
-
-    // ==================== KULÜP BAŞVURU ENDPOİNTLERİ ====================
-
+    
     /// <summary>
     /// Yeni kulüp açma başvurusu oluşturur
     /// </summary>
-    [HttpPost("request")]
+    [HttpPost("requests/create")]
     [Authorize]
     [ProducesResponseType(typeof(ClubRequestListDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -67,7 +68,7 @@ public class ClubController : AppController
         try
         {
             var result = await _clubService.CreateClubRequestAsync(dto, cancellationToken);
-            return CreatedAtAction(nameof(GetMyClubRequests), result);
+            return CreatedAtAction(nameof(GetPendingClubRequests), new { page = 1, pageSize = 10 }, result);
         }
         catch (InvalidOperationException ex)
         {
@@ -82,7 +83,7 @@ public class ClubController : AppController
     /// <summary>
     /// Bekleyen kulüp başvurularını getirir (Moderatör/Admin)
     /// </summary>
-    [HttpGet("requests/pending")]
+    [HttpGet("requests/get-pending")]
     [Authorize(Roles = "Moderator,Admin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPendingClubRequests(
@@ -101,38 +102,21 @@ public class ClubController : AppController
         }
     }
 
-    /// <summary>
-    /// Kullanıcının kendi kulüp başvurularını getirir
-    /// </summary>
-    [HttpGet("requests/my")]
-    [Authorize]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetMyClubRequests(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var result = await _clubService.GetMyClubRequestsAsync(page, pageSize, cancellationToken);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-    }
 
     /// <summary>
     /// Kulüp başvurusunu inceler (onay/red) - Moderatör/Admin
     /// </summary>
-    [HttpPost("requests/review")]
+    [HttpPut("requests/{requestId}/review")]
     [Authorize(Roles = "Moderator,Admin")]
     [ProducesResponseType(typeof(ClubRequestListDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ReviewClubRequest([FromBody] ReviewClubRequestDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> ReviewClubRequest(int requestId, [FromBody] ReviewClubRequestDto dto, CancellationToken cancellationToken)
     {
+        // URL'deki requestId ile DTO'daki eşleşmeli
+        if (requestId != dto.RequestId)
+            return BadRequest(new { message = "URL ve body'deki request ID eşleşmiyor" });
+
         var validationResult = await _reviewClubRequestValidator.ValidateAsync(dto, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -161,13 +145,47 @@ public class ClubController : AppController
             return Forbid();
         }
     }
-
     // ==================== KULÜP CRUD ENDPOİNTLERİ ====================
+
+    /// <summary>
+    /// Yeni kulüp oluşturur (Sadece Admin - başvuru olmadan doğrudan oluşturma)
+    /// </summary>
+    [HttpPost("create")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ClubDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateClub([FromBody] CreateClubDto dto, CancellationToken cancellationToken)
+    {
+        var validationResult = await _createClubValidator.ValidateAsync(dto, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new { Field = e.PropertyName, Error = e.ErrorMessage })
+            });
+        }
+
+        try
+        {
+            var result = await _clubService.CreateClubDirectAsync(dto, cancellationToken);
+            return CreatedAtAction(nameof(GetClub), new { identifier = result.Id }, result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
 
     /// <summary>
     /// Tüm kulüpleri listeler (sayfalı, arama destekli)
     /// </summary>
-    [HttpGet]
+    [HttpGet("get-all")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllClubs(
@@ -183,7 +201,7 @@ public class ClubController : AppController
     /// <summary>
     /// Kulüp detayını getirir (ID veya slug ile)
     /// </summary>
-    [HttpGet("{identifier}")]
+    [HttpGet("get/{identifier}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ClubDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -199,7 +217,7 @@ public class ClubController : AppController
     /// <summary>
     /// Kulüp bilgilerini günceller (Başkan veya Admin)
     /// </summary>
-    [HttpPut]
+    [HttpPut("update")]
     [Authorize]
     [ProducesResponseType(typeof(ClubDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -207,6 +225,7 @@ public class ClubController : AppController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateClub([FromBody] UpdateClubDto dto, CancellationToken cancellationToken)
     {
+
         var validationResult = await _updateClubValidator.ValidateAsync(dto, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -239,7 +258,7 @@ public class ClubController : AppController
     /// <summary>
     /// Kulübü siler (Sadece Admin)
     /// </summary>
-    [HttpDelete("{id}")]
+    [HttpDelete("delete/{id}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -297,18 +316,20 @@ public class ClubController : AppController
             return Forbid();
         }
     }
-
-    // ==================== ÜYELİK ENDPOİNTLERİ ====================
-
+    
     /// <summary>
     /// Kulübe katılma başvurusu yapar
     /// </summary>
-    [HttpPost("join")]
+    [HttpPost("{clubId}/join")]
     [Authorize]
     [ProducesResponseType(typeof(ClubMemberDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> JoinClub([FromBody] JoinClubDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> JoinClub(int clubId, [FromBody] JoinClubDto dto, CancellationToken cancellationToken)
     {
+        // URL'deki clubId ile DTO'daki eşleşmeli
+        if (clubId != dto.ClubId)
+            return BadRequest(new { message = "URL ve body'deki club ID eşleşmiyor" });
+
         var validationResult = await _joinClubValidator.ValidateAsync(dto, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -381,12 +402,16 @@ public class ClubController : AppController
     /// <summary>
     /// Üyelik başvurusunu işler (onay/red/çıkarma)
     /// </summary>
-    [HttpPost("members/process")]
+    [HttpPut("memberships/{membershipId}")]
     [Authorize]
     [ProducesResponseType(typeof(ClubMemberDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ProcessMembership([FromBody] ProcessMembershipDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> ProcessMembership(int membershipId, [FromBody] ProcessMembershipDto dto, CancellationToken cancellationToken)
     {
+        // URL'deki membershipId ile DTO'daki eşleşmeli
+        if (membershipId != dto.MembershipId)
+            return BadRequest(new { message = "URL ve body'deki membership ID eşleşmiyor" });
+
         var validationResult = await _processMembershipValidator.ValidateAsync(dto, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -419,12 +444,16 @@ public class ClubController : AppController
     /// <summary>
     /// Üye rolünü değiştirir veya başkanlığı devreder (Sadece Başkan)
     /// </summary>
-    [HttpPut("members/role")]
+    [HttpPut("memberships/{membershipId}/role")]
     [Authorize]
     [ProducesResponseType(typeof(ClubMemberDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdateMemberRole([FromBody] UpdateMemberRoleDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateMemberRole(int membershipId, [FromBody] UpdateMemberRoleDto dto, CancellationToken cancellationToken)
     {
+        // URL'deki membershipId ile DTO'daki eşleşmeli
+        if (membershipId != dto.MembershipId)
+            return BadRequest(new { message = "URL ve body'deki membership ID eşleşmiyor" });
+
         var validationResult = await _updateMemberRoleValidator.ValidateAsync(dto, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -457,7 +486,7 @@ public class ClubController : AppController
     /// <summary>
     /// Kullanıcının üye olduğu kulüpleri getirir
     /// </summary>
-    [HttpGet("my")]
+    [HttpGet("get-mine")]
     [Authorize]
     [ProducesResponseType(typeof(List<MyClubDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyClubs(CancellationToken cancellationToken)

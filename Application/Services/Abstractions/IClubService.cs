@@ -18,6 +18,7 @@ public interface IClubService
 
     // ==================== KULÜP CRUD ====================
 
+    Task<ClubDto> CreateClubDirectAsync(CreateClubDto dto, CancellationToken cancellationToken = default);
     Task<PagedResultDto<ClubListDto>> GetAllClubsAsync(int page, int pageSize, string? search = null, CancellationToken cancellationToken = default);
     Task<ClubDto?> GetClubByIdentifierAsync(string identifier, CancellationToken cancellationToken = default);
     Task<ClubDto?> UpdateClubAsync(UpdateClubDto dto, CancellationToken cancellationToken = default);

@@ -3,6 +3,16 @@ using Domain.Enums;
 namespace Application.DTOs.Club;
 
 /// <summary>
+/// Yeni kulüp oluşturma için DTO (Admin - doğrudan oluşturma)
+/// </summary>
+public record CreateClubDto(
+    string Name,
+    string Description,
+    bool IsPublic = true,
+    bool RequiresApproval = true
+);
+
+/// <summary>
 /// Yeni kulüp açma başvurusu için DTO
 /// </summary>
 public record CreateClubRequestDto(
@@ -69,7 +79,9 @@ public record ClubListDto(
     string? Description,
     string? LogoUrl,
     int MemberCount,
-    bool IsPublic
+    bool IsPublic,
+    int FounderId,
+    string FounderUsername
 );
 
 /// <summary>

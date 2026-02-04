@@ -235,17 +235,27 @@ public class AuthService : IAuthService
         var (isValid, userId, version) = _jwtService.ValidateRefreshToken(request.RefreshToken);
         
         if (!isValid)
+        {
+            _logger.LogWarning("Refresh token validation failed - Token is invalid or expired");
             return null;
+        }
         
         // 2. Kullanıcıyı bul
         var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
         
         if (user == null || !user.IsActive || user.IsDeleted)
+        {
+            _logger.LogWarning("Refresh token failed - User not found, inactive or deleted. UserId: {UserId}", userId);
             return null;
+        }
         
         // 3. Version kontrolü - token'daki version ile veritabanındaki eşleşmeli
         if (user.RefreshTokenVersion != version)
+        {
+            _logger.LogWarning("Refresh token failed - Version mismatch. UserId: {UserId}, TokenVersion: {TokenVersion}, DBVersion: {DBVersion}", 
+                userId, version, user.RefreshTokenVersion);
             return null;
+        }
         
         // 4. Yeni version oluştur ve son giriş zamanını güncelle
         user.RefreshTokenVersion++;

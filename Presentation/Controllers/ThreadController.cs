@@ -185,4 +185,34 @@ public class ThreadController : AppController
             return BadRequest(new { message = ex.Message });
         }
     }
+    
+    /// <summary>
+    /// Belirli bir kulübün tüm thread'lerini getirir (sayfalama ile)
+    /// </summary>
+    /// <param name="clubId">Kulüp ID</param>
+    [HttpGet("club/{clubId}/getAll")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetAllClubThreads(
+        int clubId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? q = null,
+        [FromQuery] int? categoryId = null,
+        [FromQuery] bool? isSolved = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
+        CancellationToken cancellationToken = default)
+    {
+        var threads = await _threadService.GetClubThreadsAsync(
+            clubId,
+            page,
+            pageSize,
+            q,
+            categoryId,
+            isSolved,
+            sortBy,
+            sortDir,
+            cancellationToken);
+        return Ok(threads);
+    }
 }

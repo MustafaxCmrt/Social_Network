@@ -323,6 +323,7 @@ public class ThreadService : IThreadService
             IsSolved = thread.IsSolved,
             UserId = thread.UserId,
             CategoryId = thread.CategoryId,
+            ClubId = thread.ClubId, // ÖNEMLI: ClubId'yi ekle
             CreatedAt = thread.CreatedAt,
             UpdatedAt = thread.UpdatedAt,
             User = thread.User == null ? null : new UserSummaryDto
@@ -373,5 +374,67 @@ public class ThreadService : IThreadService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         
         return true;
+    }
+
+    /// <summary>
+    /// Belirli bir kulübün thread'lerini getirir
+    /// </summary>
+    public async Task<PagedResultDto<ThreadDto>> GetClubThreadsAsync(
+        int clubId,
+        int page = 1,
+        int pageSize = 20,
+        string? q = null,
+        int? categoryId = null,
+        bool? isSolved = null,
+        string? sortBy = null,
+        string? sortDir = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+
+        var normalizedSortBy = string.IsNullOrWhiteSpace(sortBy) ? "createdat" : sortBy.Trim();
+        var normalizedSortDir = string.IsNullOrWhiteSpace(sortDir) ? "desc" : sortDir.Trim();
+        var isAsc = string.Equals(normalizedSortDir, "asc", StringComparison.OrdinalIgnoreCase);
+
+        var queryLower = string.IsNullOrWhiteSpace(q) ? null : q.Trim().ToLower();
+
+        // ÖNEMLI: Sadece bu kulübün thread'leri (ClubId == clubId)
+        Expression<Func<Threads, bool>>? predicate = t =>
+            t.ClubId == clubId // Sadece bu kulübün thread'leri
+            && (queryLower == null
+                || (t.Title != null && t.Title.ToLower().Contains(queryLower))
+                || (t.Content != null && t.Content.ToLower().Contains(queryLower)))
+            && (!categoryId.HasValue || t.CategoryId == categoryId.Value)
+            && (!isSolved.HasValue || t.IsSolved == isSolved.Value);
+
+        Func<IQueryable<Threads>, IOrderedQueryable<Threads>> orderBy = normalizedSortBy.ToLowerInvariant() switch
+        {
+            "createdat" => q => isAsc ? q.OrderBy(t => t.CreatedAt) : q.OrderByDescending(t => t.CreatedAt),
+            "updatedat" => q => isAsc ? q.OrderBy(t => t.UpdatedAt) : q.OrderByDescending(t => t.UpdatedAt),
+            "title" => q => isAsc ? q.OrderBy(t => t.Title) : q.OrderByDescending(t => t.Title),
+            "viewcount" => q => isAsc ? q.OrderBy(t => t.ViewCount) : q.OrderByDescending(t => t.ViewCount),
+            _ => q => q.OrderByDescending(t => t.CreatedAt)
+        };
+
+        var (threads, totalCount) = await _unitOfWork.Threads.FindPagedAsync(
+            predicate: predicate,
+            include: query => query
+                .Include(t => t.User)
+                .Include(t => t.Category),
+            orderBy: orderBy,
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
+
+        return new PagedResultDto<ThreadDto>
+        {
+            Items = threads.Select(MapToDto).ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
     }
 }

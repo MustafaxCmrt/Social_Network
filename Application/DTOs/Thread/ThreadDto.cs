@@ -13,9 +13,9 @@ public class ThreadDto
     public bool IsSolved { get; set; }
     public int UserId { get; set; }
     public int CategoryId { get; set; }
+    public int? ClubId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
-    
     // İlişkili veri
     public UserSummaryDto? User { get; set; }
     public CategorySummaryDto? Category { get; set; }

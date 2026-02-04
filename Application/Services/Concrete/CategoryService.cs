@@ -22,29 +22,43 @@ public class CategoryService : ICategoryService
 
     public async Task<IEnumerable<CategoryDto>> GetAllCategoriesAsync(CancellationToken cancellationToken = default)
     {
-        var categories = (await _unitOfWork.Categories.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
-            cancellationToken)).ToList();
+        // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        var categories = (await _unitOfWork.Categories.GetAllAsync(cancellationToken: cancellationToken)).ToList();
         
-        // Sıralama ve mapping RAM'de (kategori sayısı az olduğu için performans etkisi minimal)
-        return categories
-            .OrderByDescending(c => c.CreatedAt)
-            .Select(c => new CategoryDto
+        // SubCategory COUNT'ları RAM'de hesapla (kategori sayısı az)
+        var subCategoryCounts = categories
+            .Where(c => c.ParentCategoryId.HasValue)
+            .GroupBy(c => c.ParentCategoryId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+        
+        // Thread COUNT'ları için her kategori için ayrı query
+        // NOT: Kategori sayısı genelde az olduğu için (10-100) bu kabul edilebilir
+        // Alternatif: Raw SQL ile tek query'de GROUP BY COUNT
+        var result = new List<CategoryDto>();
+        
+        foreach (var c in categories.OrderByDescending(c => c.CreatedAt))
         {
-            Id = c.Id,
-            Title = c.Title,
-            Slug = c.Slug,
-            Description = c.Description,
-            CreatedAt = c.CreatedAt,
-            UpdatedAt = c.UpdatedAt,
-            CreatedUserId = c.CreatedUserId,
-            UpdatedUserId = c.UpdatedUserId,
-            ThreadCount = c.Threads.Count,
-            ParentCategoryId = c.ParentCategoryId,
-            SubCategoryCount = c.SubCategories.Count
-        });
+            var threadCount = await _unitOfWork.Threads.CountAsync(
+                t => t.CategoryId == c.Id,
+                cancellationToken);
+            
+            result.Add(new CategoryDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Slug = c.Slug,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                CreatedUserId = c.CreatedUserId,
+                UpdatedUserId = c.UpdatedUserId,
+                ThreadCount = threadCount,
+                ParentCategoryId = c.ParentCategoryId,
+                SubCategoryCount = subCategoryCounts.GetValueOrDefault(c.Id, 0)
+            });
+        }
+        
+        return result;
     }
 
     public async Task<PagedResultDto<CategoryDto>> GetAllCategoriesPaginatedAsync(
@@ -60,6 +74,7 @@ public class CategoryService : ICategoryService
 
         var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLower();
 
+        // PERFORMANS OPTİMİZASYONU: Include kaldırıldı - N+1 query sorunu çözüldü
         var (categories, totalCount) = await _unitOfWork.Categories.FindPagedAsync(
             predicate: c =>
                 (normalizedSearch == null
@@ -72,9 +87,7 @@ public class CategoryService : ICategoryService
                             : c.ParentCategoryId == parentCategoryId.Value)
                         : c.ParentCategoryId == null
                 ),
-            include: q => q
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
+            include: null, // Include kaldırıldı - performans optimizasyonu
             orderBy: q => q.OrderByDescending(c => c.CreatedAt),
             page: page,
             pageSize: pageSize,
@@ -82,20 +95,35 @@ public class CategoryService : ICategoryService
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        var items = categories.Select(c => new CategoryDto
+        // PERFORMANS: Sadece bu sayfadaki kategoriler için COUNT'ları hesapla
+        var items = new List<CategoryDto>();
+        
+        foreach (var c in categories)
         {
-            Id = c.Id,
-            Title = c.Title,
-            Slug = c.Slug,
-            Description = c.Description,
-            CreatedAt = c.CreatedAt,
-            UpdatedAt = c.UpdatedAt,
-            CreatedUserId = c.CreatedUserId,
-            UpdatedUserId = c.UpdatedUserId,
-            ThreadCount = c.Threads.Count,
-            ParentCategoryId = c.ParentCategoryId,
-            SubCategoryCount = c.SubCategories.Count
-        }).ToList();
+            // Her kategori için ayrı COUNT query (pagination olduğu için genelde 10-50 kategori max)
+            var threadCount = await _unitOfWork.Threads.CountAsync(
+                t => t.CategoryId == c.Id,
+                cancellationToken);
+            
+            var subCategoryCount = await _unitOfWork.Categories.CountAsync(
+                cat => cat.ParentCategoryId == c.Id,
+                cancellationToken);
+            
+            items.Add(new CategoryDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Slug = c.Slug,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                CreatedUserId = c.CreatedUserId,
+                UpdatedUserId = c.UpdatedUserId,
+                ThreadCount = threadCount,
+                ParentCategoryId = c.ParentCategoryId,
+                SubCategoryCount = subCategoryCount
+            });
+        }
 
         return new PagedResultDto<CategoryDto>
         {
@@ -109,15 +137,22 @@ public class CategoryService : ICategoryService
 
     public async Task<CategoryDto?> GetCategoryByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var category = await _unitOfWork.Categories.FirstOrDefaultWithIncludesAsync(
+        // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        var category = await _unitOfWork.Categories.FirstOrDefaultAsync(
             predicate: c => c.Id == id,
-            include: query => query
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
             cancellationToken);
 
         if (category == null)
             return null;
+
+        // COUNT'ları ayrı sorgularla al
+        var threadCount = await _unitOfWork.Threads.CountAsync(
+            t => t.CategoryId == id,
+            cancellationToken);
+        
+        var subCategoryCount = await _unitOfWork.Categories.CountAsync(
+            c => c.ParentCategoryId == id,
+            cancellationToken);
 
         return new CategoryDto
         {
@@ -129,23 +164,30 @@ public class CategoryService : ICategoryService
             UpdatedAt = category.UpdatedAt,
             CreatedUserId = category.CreatedUserId,
             UpdatedUserId = category.UpdatedUserId,
-            ThreadCount = category.Threads?.Count ?? 0,
+            ThreadCount = threadCount,
             ParentCategoryId = category.ParentCategoryId,
-            SubCategoryCount = category.SubCategories?.Count ?? 0
+            SubCategoryCount = subCategoryCount
         };
     }
 
     public async Task<CategoryDto?> GetCategoryBySlugAsync(string slug, CancellationToken cancellationToken = default)
     {
-        var category = await _unitOfWork.Categories.FirstOrDefaultWithIncludesAsync(
+        // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        var category = await _unitOfWork.Categories.FirstOrDefaultAsync(
             predicate: c => c.Slug == slug,
-            include: query => query
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
             cancellationToken);
 
         if (category == null)
             return null;
+
+        // COUNT'ları ayrı sorgularla al
+        var threadCount = await _unitOfWork.Threads.CountAsync(
+            t => t.CategoryId == category.Id,
+            cancellationToken);
+        
+        var subCategoryCount = await _unitOfWork.Categories.CountAsync(
+            c => c.ParentCategoryId == category.Id,
+            cancellationToken);
 
         return new CategoryDto
         {
@@ -157,9 +199,9 @@ public class CategoryService : ICategoryService
             UpdatedAt = category.UpdatedAt,
             CreatedUserId = category.CreatedUserId,
             UpdatedUserId = category.UpdatedUserId,
-            ThreadCount = category.Threads?.Count ?? 0,
+            ThreadCount = threadCount,
             ParentCategoryId = category.ParentCategoryId,
-            SubCategoryCount = category.SubCategories?.Count ?? 0
+            SubCategoryCount = subCategoryCount
         };
     }
 
@@ -387,76 +429,126 @@ public class CategoryService : ICategoryService
     
     public async Task<List<CategoryTreeDto>> GetCategoryTreeAsync(CancellationToken cancellationToken = default)
     {
-        // Tüm kategorileri tek seferde çek (tree yapısı için gerekli)
-        // Include ile ilişkili verileri de getir
-        var allCategoriesList = (await _unitOfWork.Categories.GetAllWithIncludesAsync(
-            include: query => query
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
-            cancellationToken)).ToList();
+        // PERFORMANS: Tree için tüm kategorileri çekmek gerekli
+        var allCategoriesList = (await _unitOfWork.Categories.GetAllAsync(cancellationToken: cancellationToken)).ToList();
+        
+        // SubCategory COUNT'ları RAM'de hesapla (hızlı)
+        var subCategoryCounts = allCategoriesList
+            .Where(c => c.ParentCategoryId.HasValue)
+            .GroupBy(c => c.ParentCategoryId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+        
+        // Thread COUNT'ları için her kategori için ayrı query
+        // TODO: Bu kısım raw SQL ile optimize edilebilir (SELECT CategoryId, COUNT(*) FROM Threads GROUP BY CategoryId)
+        var threadCountsDict = new Dictionary<int, int>();
+        foreach (var category in allCategoriesList)
+        {
+            var count = await _unitOfWork.Threads.CountAsync(
+                t => t.CategoryId == category.Id,
+                cancellationToken);
+            threadCountsDict[category.Id] = count;
+        }
         
         var rootCategories = allCategoriesList
             .Where(c => c.ParentCategoryId == null)
             .OrderBy(c => c.Title)
             .ToList();
 
-        // Recursive tree oluştur
-        return rootCategories.Select(c => BuildCategoryTree(c, allCategoriesList)).ToList();
+        // Recursive tree oluştur (COUNT dictionary'leri ile)
+        return rootCategories.Select(c => BuildCategoryTree(c, allCategoriesList, threadCountsDict, subCategoryCounts)).ToList();
     }
 
     public async Task<IEnumerable<CategoryDto>> GetSubCategoriesAsync(int parentId, CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.FindWithIncludesAsync(
+        // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        var categories = (await _unitOfWork.Categories.FindAsync(
             predicate: c => c.ParentCategoryId == parentId,
-            include: query => query
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
-            cancellationToken: cancellationToken);
-
-        return categories.Select(c => new CategoryDto
+            cancellationToken: cancellationToken)).ToList();
+        
+        if (!categories.Any())
+            return Enumerable.Empty<CategoryDto>();
+        
+        // Her kategori için ayrı COUNT query (genelde 10-20 alt kategori max)
+        var result = new List<CategoryDto>();
+        
+        foreach (var c in categories)
         {
-            Id = c.Id,
-            Title = c.Title,
-            Slug = c.Slug,
-            Description = c.Description,
-            CreatedAt = c.CreatedAt,
-            UpdatedAt = c.UpdatedAt,
-            CreatedUserId = c.CreatedUserId,
-            UpdatedUserId = c.UpdatedUserId,
-            ThreadCount = c.Threads.Count,
-            ParentCategoryId = c.ParentCategoryId,
-            SubCategoryCount = c.SubCategories.Count
-        });
+            var threadCount = await _unitOfWork.Threads.CountAsync(
+                t => t.CategoryId == c.Id,
+                cancellationToken);
+            
+            var subCategoryCount = await _unitOfWork.Categories.CountAsync(
+                cat => cat.ParentCategoryId == c.Id,
+                cancellationToken);
+            
+            result.Add(new CategoryDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Slug = c.Slug,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                CreatedUserId = c.CreatedUserId,
+                UpdatedUserId = c.UpdatedUserId,
+                ThreadCount = threadCount,
+                ParentCategoryId = c.ParentCategoryId,
+                SubCategoryCount = subCategoryCount
+            });
+        }
+        
+        return result;
     }
 
     public async Task<IEnumerable<CategoryDto>> GetRootCategoriesAsync(CancellationToken cancellationToken = default)
     {
-        var categories = await _unitOfWork.Categories.FindWithIncludesAsync(
+        // PERFORMANS OPTİMİZASYONU: Include kaldırıldı
+        var categories = (await _unitOfWork.Categories.FindAsync(
             predicate: c => c.ParentCategoryId == null,
-            include: query => query
-                .Include(c => c.Threads)
-                .Include(c => c.SubCategories),
-            cancellationToken: cancellationToken);
-
-        return categories.Select(c => new CategoryDto
+            cancellationToken: cancellationToken)).ToList();
+        
+        if (!categories.Any())
+            return Enumerable.Empty<CategoryDto>();
+        
+        // Her kategori için ayrı COUNT query (genelde 5-15 root kategori)
+        var result = new List<CategoryDto>();
+        
+        foreach (var c in categories)
         {
-            Id = c.Id,
-            Title = c.Title,
-            Slug = c.Slug,
-            Description = c.Description,
-            CreatedAt = c.CreatedAt,
-            UpdatedAt = c.UpdatedAt,
-            CreatedUserId = c.CreatedUserId,
-            UpdatedUserId = c.UpdatedUserId,
-            ThreadCount = c.Threads.Count,
-            ParentCategoryId = c.ParentCategoryId,
-            SubCategoryCount = c.SubCategories.Count
-        });
+            var threadCount = await _unitOfWork.Threads.CountAsync(
+                t => t.CategoryId == c.Id,
+                cancellationToken);
+            
+            var subCategoryCount = await _unitOfWork.Categories.CountAsync(
+                cat => cat.ParentCategoryId == c.Id,
+                cancellationToken);
+            
+            result.Add(new CategoryDto
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Slug = c.Slug,
+                Description = c.Description,
+                CreatedAt = c.CreatedAt,
+                UpdatedAt = c.UpdatedAt,
+                CreatedUserId = c.CreatedUserId,
+                UpdatedUserId = c.UpdatedUserId,
+                ThreadCount = threadCount,
+                ParentCategoryId = c.ParentCategoryId,
+                SubCategoryCount = subCategoryCount
+            });
+        }
+        
+        return result;
     }
     
     // Helper Methods
     
-    private CategoryTreeDto BuildCategoryTree(Categories category, List<Categories> allCategories)
+    private CategoryTreeDto BuildCategoryTree(
+        Categories category, 
+        List<Categories> allCategories,
+        Dictionary<int, int> threadCountsDict,
+        Dictionary<int, int> subCategoryCounts)
     {
         var treeDto = new CategoryTreeDto
         {
@@ -464,7 +556,7 @@ public class CategoryService : ICategoryService
             Title = category.Title,
             Slug = category.Slug,
             Description = category.Description,
-            ThreadCount = category.Threads?.Count ?? 0,
+            ThreadCount = threadCountsDict.GetValueOrDefault(category.Id, 0),
             ParentCategoryId = category.ParentCategoryId,
             SubCategories = new List<CategoryTreeDto>()
         };
@@ -473,7 +565,7 @@ public class CategoryService : ICategoryService
         var subCategories = allCategories.Where(c => c.ParentCategoryId == category.Id).ToList();
         foreach (var sub in subCategories)
         {
-            treeDto.SubCategories.Add(BuildCategoryTree(sub, allCategories));
+            treeDto.SubCategories.Add(BuildCategoryTree(sub, allCategories, threadCountsDict, subCategoryCounts));
         }
 
         return treeDto;

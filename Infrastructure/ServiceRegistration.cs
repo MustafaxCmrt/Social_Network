@@ -35,31 +35,31 @@ public static class ServiceRegistration
             options.AddFixedWindowLimiter("Fixed", opt =>
             {
                 opt.Window = TimeSpan.FromMinutes(1);
-                opt.PermitLimit = 100; // Dakikada 100 request
+                opt.PermitLimit = 300; // Dakikada 300 request (artırıldı: sayfa yenilemelerini desteklemek için)
                 opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                opt.QueueLimit = 10;
+                opt.QueueLimit = 20;
             });
 
             // Sliding Window Rate Limiter (daha esnek)
             options.AddSlidingWindowLimiter("Sliding", opt =>
             {
                 opt.Window = TimeSpan.FromMinutes(1);
-                opt.PermitLimit = 100;
+                opt.PermitLimit = 300; // Artırıldı
                 opt.SegmentsPerWindow = 6; // 10 saniyelik segmentler
                 opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                opt.QueueLimit = 10;
+                opt.QueueLimit = 20;
             });
 
-            // IP bazlı rate limiting
+            // IP bazlı rate limiting (Development için gevşetildi)
             options.AddPolicy("PerIpPolicy", httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         Window = TimeSpan.FromMinutes(1),
-                        PermitLimit = 60, // IP başına dakikada 60 request
+                        PermitLimit = 300, // IP başına dakikada 300 request (60'tan artırıldı)
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                        QueueLimit = 5
+                        QueueLimit = 20
                     }));
 
             // Global rejection behavior

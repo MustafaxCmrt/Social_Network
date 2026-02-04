@@ -93,6 +93,11 @@ public class AuthController : AppController
         }
 
         // 4. Login başarılı - JWT token döndür
+        _logger.LogInformation("User logged in successfully - UserId: {UserId}, ExpiresIn: {ExpiresIn} minutes, RefreshTokenExpiresIn: {RefreshTokenExpiresIn} days", 
+            result.UserId, 
+            result.ExpiresIn, 
+            result.RefreshTokenExpiresInDays);
+        
         return Ok(result);
     }
 
@@ -171,6 +176,7 @@ public class AuthController : AppController
         // 2. Refresh token geçersiz veya süresi dolmuş
         if (result == null)
         {
+            _logger.LogWarning("Refresh token failed - Invalid or expired token");
             return Unauthorized(new
             {
                 Message = "Refresh token geçersiz veya süresi dolmuş"
@@ -178,6 +184,10 @@ public class AuthController : AppController
         }
         
         // 3. Yeni token'ları döndür
+        _logger.LogInformation("Refresh token endpoint success - UserId: {UserId}, ExpiresIn: {ExpiresIn} minutes", 
+            result.UserId, 
+            result.ExpiresIn);
+        
         return Ok(result);
     }
     

@@ -4,6 +4,7 @@ using System.Text;
 using Application.Models;
 using Application.Services.Abstractions;
 using Domain.Entities;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -15,10 +16,17 @@ namespace Application.Services.Concrete;
 public class JwtService : IJwtService
 {
     private readonly JwtSettings _jwtSettings;
+    private readonly ILogger<JwtService> _logger;
 
-    public JwtService(IOptions<JwtSettings> jwtSettings)
+    public JwtService(IOptions<JwtSettings> jwtSettings, ILogger<JwtService> logger)
     {
         _jwtSettings = jwtSettings.Value;
+        _logger = logger;
+        
+        // SORUN BULMA: JWT Settings değerlerini logla
+        _logger.LogInformation("JWT Settings loaded - ExpirationMinutes: {ExpirationMinutes}, RefreshTokenExpirationDays: {RefreshTokenExpirationDays}", 
+            _jwtSettings.ExpirationMinutes, 
+            _jwtSettings.RefreshTokenExpirationDays);
     }
 
     /// <summary>
@@ -61,12 +69,19 @@ public class JwtService : IJwtService
         // İmzalama algoritması (HMAC SHA-256)
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+        // Token süresini hesapla ve logla
+        var expirationTime = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes);
+        _logger.LogInformation("Creating Access Token - UserId: {UserId}, ExpirationMinutes: {ExpirationMinutes}, ExpiresAt: {ExpiresAt}", 
+            user.Id, 
+            _jwtSettings.ExpirationMinutes, 
+            expirationTime);
+
         // Token'ı oluştur
         var token = new JwtSecurityToken(
             issuer: _jwtSettings.Issuer,                                    // Token'ı kim oluşturdu
             audience: _jwtSettings.Audience,                                // Token'ı kim kullanacak
             claims: claims,                                                  // Kullanıcı bilgileri
-            expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes), // Geçerlilik süresi
+            expires: expirationTime,                                         // Geçerlilik süresi
             signingCredentials: credentials                                  // İmza
         );
 

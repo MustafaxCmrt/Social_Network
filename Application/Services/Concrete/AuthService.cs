@@ -261,6 +261,11 @@ public class AuthService : IAuthService
         var expiresIn = _jwtService.GetTokenExpirationMinutes();
         var refreshTokenExpiresInDays = _jwtService.GetRefreshTokenExpirationDays();
         
+        _logger.LogInformation("Refresh token successful - UserId: {UserId}, NewVersion: {Version}, ExpiresIn: {ExpiresIn} minutes", 
+            user.Id, 
+            user.RefreshTokenVersion, 
+            expiresIn);
+        
         // 7. Response DTO oluştur ve döndür
         return new RefreshTokenResponseDto
         {

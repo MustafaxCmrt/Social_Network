@@ -1,4 +1,5 @@
 using Application.DTOs.Club;
+using Domain.Enums;
 using FluentValidation;
 
 namespace Application.Validations.Club;
@@ -92,3 +93,24 @@ public class UpdateClubValidator : AbstractValidator<UpdateClubDto>
             .WithMessage("Banner URL en fazla 500 karakter olabilir");
     }
 }
+
+/// <summary>
+/// Kulüp başvuru durumu güncelleme validasyonu (Admin/Moderator)
+/// </summary>
+public class UpdateClubApplicationStatusValidator : AbstractValidator<UpdateClubApplicationStatusDto>
+{
+    public UpdateClubApplicationStatusValidator()
+    {
+        RuleFor(x => x.Status)
+            .IsInEnum()
+            .WithMessage("Geçersiz durum değeri");
+
+        RuleFor(x => x.RejectionReason)
+            .NotEmpty()
+            .When(x => x.Status == ClubApplicationStatus.Rejected)
+            .WithMessage("Başvuru reddedilirken neden belirtilmelidir")
+            .MaximumLength(500)
+            .WithMessage("Ret nedeni en fazla 500 karakter olabilir");
+    }
+}
+

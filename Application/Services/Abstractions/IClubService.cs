@@ -24,6 +24,8 @@ public interface IClubService
     Task<ClubDto?> UpdateClubAsync(UpdateClubDto dto, CancellationToken cancellationToken = default);
     Task<bool> DeleteClubAsync(int clubId, CancellationToken cancellationToken = default);
     Task<string?> UploadClubImageAsync(int clubId, string imageUrl, string imageType, CancellationToken cancellationToken = default);
+    Task<bool> UpdateClubApplicationStatusAsync(int clubId, UpdateClubApplicationStatusDto dto, CancellationToken cancellationToken = default);
+    Task<PagedResultDto<ClubListDto>> GetUserClubApplicationsAsync(int page, int pageSize, ClubApplicationStatus? status = null, CancellationToken cancellationToken = default);
 
     // ==================== ÜYELİK ====================
 

@@ -362,6 +362,11 @@ namespace Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
+                    b.Property<int>("ApplicationStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("BannerUrl")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -414,10 +419,20 @@ namespace Persistence.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<bool>("RequiresApproval")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("ReviewedBy")
+                        .HasColumnType("int");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -431,6 +446,9 @@ namespace Persistence.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ApplicationStatus")
+                        .HasDatabaseName("IX_Clubs_ApplicationStatus");
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Clubs_CreatedAt");
@@ -450,6 +468,11 @@ namespace Persistence.Migrations
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("IX_Clubs_Name");
+
+                    b.HasIndex("ReviewedAt")
+                        .HasDatabaseName("IX_Clubs_ReviewedAt");
+
+                    b.HasIndex("ReviewedBy");
 
                     b.HasIndex("Slug")
                         .IsUnique()
@@ -1205,7 +1228,7 @@ namespace Persistence.Migrations
                             IsActive = true,
                             IsDeleted = false,
                             LastName = "User",
-                            PasswordHash = "$2a$11$iMeDtp.b8bCqN9KsHLMS5eh1eIKKA/XuTTA8JlmRyRKKIa712V9NC",
+                            PasswordHash = "$2a$11$YAj060D1M0jgPcM9HsGx3OEog0aGKnmmWCsq5f7TdnI4r.r2QnZha",
                             Recstatus = true,
                             RefreshTokenVersion = 0,
                             Role = 2,
@@ -1285,6 +1308,11 @@ namespace Persistence.Migrations
                         .HasForeignKey("FounderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Domain.Entities.Users", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Founder");
                 });

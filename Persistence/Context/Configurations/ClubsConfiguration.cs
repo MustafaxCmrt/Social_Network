@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -50,6 +51,22 @@ public class ClubsConfiguration : IEntityTypeConfiguration<Clubs>
         builder.Property(c => c.FounderId)
             .IsRequired();
 
+        // Application Status Properties
+        builder.Property(c => c.ApplicationStatus)
+            .IsRequired()
+            .HasDefaultValue(ClubApplicationStatus.Pending)
+            .HasConversion<int>(); // Enum'u int olarak sakla
+
+        builder.Property(c => c.RejectionReason)
+            .IsRequired(false)
+            .HasMaxLength(500);
+
+        builder.Property(c => c.ReviewedAt)
+            .IsRequired(false);
+
+        builder.Property(c => c.ReviewedBy)
+            .IsRequired(false);
+
         // BaseEntity properties - Audit Trail
         builder.Property(c => c.CreatedAt)
             .IsRequired();
@@ -98,11 +115,24 @@ public class ClubsConfiguration : IEntityTypeConfiguration<Clubs>
         builder.HasIndex(c => c.IsDeleted)
             .HasDatabaseName("IX_Clubs_IsDeleted");
 
+        builder.HasIndex(c => c.ApplicationStatus)
+            .HasDatabaseName("IX_Clubs_ApplicationStatus");
+
+        builder.HasIndex(c => c.ReviewedAt)
+            .HasDatabaseName("IX_Clubs_ReviewedAt");
+
         // Relationships
         builder.HasOne(c => c.Founder)
             .WithMany()
             .HasForeignKey(c => c.FounderId)
             .OnDelete(DeleteBehavior.Restrict); // Kurucu silinse bile kulüp kalsın
+
+        // ReviewedBy - Admin/Moderator relationship (optional)
+        builder.HasOne<Users>()
+            .WithMany()
+            .HasForeignKey(c => c.ReviewedBy)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false); // Reviewer silinse bile kulüp kalsın
 
         builder.HasMany(c => c.Memberships)
             .WithOne(cm => cm.Club)

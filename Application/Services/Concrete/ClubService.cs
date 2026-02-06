@@ -336,6 +336,9 @@ public class ClubService : IClubService
             club.FounderId,
             user.Username,
             club.CreatedAt,
+            club.ApplicationStatus,
+            club.RejectionReason,
+            club.ReviewedAt,
             true,
             ClubRole.President,
             MembershipStatus.Approved
@@ -370,7 +373,10 @@ public class ClubService : IClubService
             c.MemberCount,
             c.IsPublic,
             c.FounderId,
-            c.Founder?.Username ?? "Bilinmiyor"
+            c.Founder?.Username ?? "Bilinmiyor",
+            c.ApplicationStatus,
+            c.RejectionReason,
+            c.ReviewedAt
         )).ToList();
 
         return new PagedResultDto<ClubListDto>
@@ -434,6 +440,9 @@ public class ClubService : IClubService
             club.FounderId,
             founder?.Username ?? "Bilinmiyor",
             club.CreatedAt,
+            club.ApplicationStatus,
+            club.RejectionReason,
+            club.ReviewedAt,
             isMember,
             currentUserRole,
             currentUserStatus
@@ -507,7 +516,13 @@ public class ClubService : IClubService
             club.MemberCount,
             club.FounderId,
             founder?.Username ?? "Bilinmiyor",
-            club.CreatedAt
+            club.CreatedAt,
+            club.ApplicationStatus,
+            club.RejectionReason,
+            club.ReviewedAt,
+            null,
+            null,
+            null
         );
     }
 
@@ -966,5 +981,105 @@ public class ClubService : IClubService
         slug = slug.Trim('-');
 
         return slug;
+    }
+
+    // ==================== KULÜP BAŞVURU DURUMU GÜNCELLEMELERİ ====================
+
+    public async Task<bool> UpdateClubApplicationStatusAsync(int clubId, UpdateClubApplicationStatusDto dto, CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUserService.GetCurrentUserId()
+            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
+
+        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
+        if (user == null || (user.Role != Roles.Moderator && user.Role != Roles.Admin))
+            throw new UnauthorizedAccessException("Bu işlem için moderatör veya admin yetkisi gerekiyor");
+
+        var club = await _unitOfWork.Clubs.GetByIdAsync(clubId, cancellationToken);
+        if (club == null)
+            return false;
+
+        club.ApplicationStatus = dto.Status;
+        club.ReviewedAt = DateTime.UtcNow;
+        club.ReviewedBy = userId;
+        club.RejectionReason = dto.Status == ClubApplicationStatus.Rejected ? dto.RejectionReason : null;
+
+        _unitOfWork.Clubs.Update(club);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Kulüp sahibine bildirim gönder
+        var notificationType = dto.Status switch
+        {
+            ClubApplicationStatus.Approved => NotificationType.ClubRequestApproved,
+            ClubApplicationStatus.Rejected => NotificationType.ClubRequestRejected,
+            _ => NotificationType.ClubRequestReceived
+        };
+
+        var message = dto.Status switch
+        {
+            ClubApplicationStatus.Approved => $"{club.Name} kulübünüz onaylandı!",
+            ClubApplicationStatus.Rejected => $"{club.Name} kulübünüz reddedildi. Sebep: {dto.RejectionReason}",
+            _ => $"{club.Name} kulübünüz inceleme altına alındı"
+        };
+
+        await _notificationService.CreateNotificationAsync(new CreateNotificationDto
+        {
+            UserId = club.FounderId,
+            ActorUserId = userId,
+            Type = notificationType,
+            Message = message
+        }, cancellationToken);
+
+        _logger.LogInformation(
+            "Kulüp {ClubId} başvuru durumu {ReviewerId} tarafından {Status} olarak güncellendi",
+            clubId, userId, dto.Status);
+
+        return true;
+    }
+
+    public async Task<PagedResultDto<ClubListDto>> GetUserClubApplicationsAsync(int page, int pageSize, ClubApplicationStatus? status = null, CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUserService.GetCurrentUserId()
+            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
+
+        Expression<Func<Clubs, bool>> predicate = c => c.FounderId == userId;
+
+        // Status filtresi varsa ekle
+        if (status.HasValue)
+        {
+            var statusValue = status.Value;
+            predicate = c => c.FounderId == userId && c.ApplicationStatus == statusValue;
+        }
+
+        var (clubs, totalCount) = await _unitOfWork.Clubs.FindPagedAsync(
+            predicate: predicate,
+            include: query => query.Include(c => c.Founder),
+            orderBy: q => q.OrderByDescending(c => c.CreatedAt),
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
+
+        var items = clubs.Select(c => new ClubListDto(
+            c.Id,
+            c.Name,
+            c.Slug,
+            c.Description,
+            c.LogoUrl,
+            c.MemberCount,
+            c.IsPublic,
+            c.FounderId,
+            c.Founder?.Username ?? "Bilinmiyor",
+            c.ApplicationStatus,
+            c.RejectionReason,
+            c.ReviewedAt
+        )).ToList();
+
+        return new PagedResultDto<ClubListDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
     }
 }

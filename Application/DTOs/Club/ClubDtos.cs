@@ -64,6 +64,9 @@ public record ClubDto(
     int FounderId,
     string FounderUsername,
     DateTime CreatedAt,
+    ClubApplicationStatus ApplicationStatus,
+    string? RejectionReason = null,
+    DateTime? ReviewedAt = null,
     bool? IsMember = null,
     ClubRole? CurrentUserRole = null,
     MembershipStatus? CurrentUserStatus = null
@@ -81,7 +84,10 @@ public record ClubListDto(
     int MemberCount,
     bool IsPublic,
     int FounderId,
-    string FounderUsername
+    string FounderUsername,
+    ClubApplicationStatus ApplicationStatus,
+    string? RejectionReason = null,
+    DateTime? ReviewedAt = null
 );
 
 /// <summary>
@@ -95,6 +101,14 @@ public record UpdateClubDto(
     string? BannerUrl,
     bool? IsPublic,
     bool? RequiresApproval
+);
+
+/// <summary>
+/// Kulüp başvuru durumunu güncelleme DTO (Admin/Moderator)
+/// </summary>
+public record UpdateClubApplicationStatusDto(
+    ClubApplicationStatus Status,
+    string? RejectionReason = null
 );
 
 /// <summary>

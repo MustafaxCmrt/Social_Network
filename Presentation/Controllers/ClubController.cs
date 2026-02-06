@@ -22,6 +22,7 @@ public class ClubController : AppController
     private readonly IValidator<JoinClubDto> _joinClubValidator;
     private readonly IValidator<ProcessMembershipDto> _processMembershipValidator;
     private readonly IValidator<UpdateMemberRoleDto> _updateMemberRoleValidator;
+    private readonly IValidator<UpdateClubApplicationStatusDto> _updateApplicationStatusValidator;
 
     public ClubController(
         IClubService clubService,
@@ -32,7 +33,8 @@ public class ClubController : AppController
         IValidator<UpdateClubDto> updateClubValidator,
         IValidator<JoinClubDto> joinClubValidator,
         IValidator<ProcessMembershipDto> processMembershipValidator,
-        IValidator<UpdateMemberRoleDto> updateMemberRoleValidator)
+        IValidator<UpdateMemberRoleDto> updateMemberRoleValidator,
+        IValidator<UpdateClubApplicationStatusDto> updateApplicationStatusValidator)
     {
         _clubService = clubService;
         _fileService = fileService;
@@ -43,6 +45,7 @@ public class ClubController : AppController
         _joinClubValidator = joinClubValidator;
         _processMembershipValidator = processMembershipValidator;
         _updateMemberRoleValidator = updateMemberRoleValidator;
+        _updateApplicationStatusValidator = updateApplicationStatusValidator;
     }
     
     /// <summary>
@@ -495,6 +498,68 @@ public class ClubController : AppController
         {
             var result = await _clubService.GetMyClubsAsync(cancellationToken);
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Kullanıcının kulüp başvurularını getirir
+    /// </summary>
+    [HttpGet("my-applications")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyApplications(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] ClubApplicationStatus? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _clubService.GetUserClubApplicationsAsync(page, pageSize, status, cancellationToken);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Kulüp başvuru durumunu günceller (Admin/Moderator)
+    /// </summary>
+    [HttpPatch("{id}/application-status")]
+    [Authorize(Roles = "Admin,Moderator")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateApplicationStatus(
+        int id,
+        [FromBody] UpdateClubApplicationStatusDto dto,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await _updateApplicationStatusValidator.ValidateAsync(dto, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new
+            {
+                Message = "Validation hatası",
+                Errors = validationResult.Errors.Select(e => new { Field = e.PropertyName, Error = e.ErrorMessage })
+            });
+        }
+
+        try
+        {
+            var result = await _clubService.UpdateClubApplicationStatusAsync(id, dto, cancellationToken);
+            if (!result)
+                return NotFound(new { message = "Kulüp bulunamadı" });
+
+            return Ok(new { message = "Başvuru durumu güncellendi" });
         }
         catch (UnauthorizedAccessException ex)
         {

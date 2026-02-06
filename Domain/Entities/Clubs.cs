@@ -1,4 +1,5 @@
 using Domain.Common;
+using Domain.Enums;
 
 namespace Domain.Entities;
 
@@ -52,6 +53,11 @@ public class Clubs : BaseEntity
     /// Kulübün kurucusu (başkan olarak atanır) (FK)
     /// </summary>
     public int FounderId { get; set; }
+
+    public ClubApplicationStatus ApplicationStatus { get; set; }
+    public string? RejectionReason { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public int? ReviewedBy { get; set; }
     
     // ==================== NAVIGATION PROPERTIES ====================
     

@@ -1,4 +1,5 @@
 using Application.DTOs.Club;
+using Application.DTOs.Common;
 using Application.Services.Abstractions;
 using Domain.Enums;
 using FluentValidation;
@@ -560,6 +561,33 @@ public class ClubController : AppController
                 return NotFound(new { message = "Kulüp bulunamadı" });
 
             return Ok(new { message = "Başvuru durumu güncellendi" });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Bekleyen üyelik başvurularını getirir (Kulüp yöneticileri için)
+    /// </summary>
+    /// <remarks>
+    /// - Admin/Moderator: Tüm bekleyen başvuruları görebilir
+    /// - Kulüp yöneticileri: Sadece kendi kulüplerinin bekleyen başvurularını görebilir
+    /// </remarks>
+    [HttpGet("memberships/pending")]
+    [Authorize]
+    [ProducesResponseType(typeof(PagedResultDto<ClubMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingMemberships(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _clubService.GetPendingMembershipsAsync(page, pageSize, cancellationToken);
+            return Ok(result);
         }
         catch (UnauthorizedAccessException ex)
         {

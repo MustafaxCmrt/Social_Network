@@ -32,6 +32,7 @@ public interface IClubService
     Task<ClubMemberDto> JoinClubAsync(JoinClubDto dto, CancellationToken cancellationToken = default);
     Task<bool> LeaveClubAsync(int clubId, CancellationToken cancellationToken = default);
     Task<PagedResultDto<ClubMemberDto>> GetClubMembersAsync(int clubId, int page, int pageSize, MembershipStatus? status = null, CancellationToken cancellationToken = default);
+    Task<PagedResultDto<ClubMemberDto>> GetPendingMembershipsAsync(int page, int pageSize, CancellationToken cancellationToken = default);
     Task<ClubMemberDto?> ProcessMembershipAsync(ProcessMembershipDto dto, CancellationToken cancellationToken = default);
     Task<ClubMemberDto?> UpdateMemberRoleAsync(UpdateMemberRoleDto dto, CancellationToken cancellationToken = default);
     Task<List<MyClubDto>> GetMyClubsAsync(CancellationToken cancellationToken = default);

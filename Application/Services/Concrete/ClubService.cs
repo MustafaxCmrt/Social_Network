@@ -1082,4 +1082,89 @@ public class ClubService : IClubService
             TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
         };
     }
+
+    public async Task<PagedResultDto<ClubMemberDto>> GetPendingMembershipsAsync(int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUserService.GetCurrentUserId()
+            ?? throw new UnauthorizedAccessException("Oturum açmanız gerekiyor");
+
+        // Kullanıcının yönetici/moderatör olduğu kulüpleri al
+        var userRoles = await _unitOfWork.Users
+            .FindAsync(u => u.Id == userId, cancellationToken: cancellationToken);
+        
+        var user = userRoles.FirstOrDefault();
+        if (user == null)
+            throw new UnauthorizedAccessException("Kullanıcı bulunamadı");
+
+        var isAdminOrModerator = user.Role == Roles.Admin || user.Role == Roles.Moderator;
+
+        // Admin/Moderator ise tüm pending başvuruları görebilir
+        // Normal kullanıcı ise sadece yönettiği kulüplerin pending başvurularını görebilir
+        Expression<Func<ClubMemberships, bool>> predicate;
+
+        if (isAdminOrModerator)
+        {
+            // Admin/Moderator tüm pending başvuruları görebilir
+            predicate = cm => cm.Status == MembershipStatus.Pending;
+        }
+        else
+        {
+            // Normal kullanıcı sadece başkan/başkan yardımcısı/yönetim kurulu üyesi olduğu kulüplerin başvurularını görebilir
+            var managedClubIds = await _unitOfWork.ClubMemberships
+                .FindAsync(
+                    cm => cm.UserId == userId && 
+                          (cm.Role == ClubRole.President || cm.Role == ClubRole.VicePresident || cm.Role == ClubRole.Officer) &&
+                          cm.Status == MembershipStatus.Approved,
+                    cancellationToken: cancellationToken);
+
+            var clubIds = managedClubIds.Select(cm => cm.ClubId).ToList();
+
+            if (!clubIds.Any())
+            {
+                // Yönettiği kulüp yoksa boş liste döndür
+                return new PagedResultDto<ClubMemberDto>
+                {
+                    Items = new List<ClubMemberDto>(),
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalCount = 0,
+                    TotalPages = 0
+                };
+            }
+
+            predicate = cm => clubIds.Contains(cm.ClubId) && cm.Status == MembershipStatus.Pending;
+        }
+
+        var (memberships, totalCount) = await _unitOfWork.ClubMemberships.FindPagedAsync(
+            predicate: predicate,
+            include: query => query
+                .Include(cm => cm.User)
+                .Include(cm => cm.Club),
+            orderBy: q => q.OrderBy(cm => cm.CreatedAt),
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
+
+        var items = memberships.Select(cm => new ClubMemberDto(
+            cm.Id,
+            cm.UserId,
+            cm.User.Username,
+            cm.User.FirstName,
+            cm.User.LastName,
+            cm.User.ProfileImg,
+            cm.Role,
+            cm.Status,
+            cm.JoinedAt,
+            cm.JoinNote
+        )).ToList();
+
+        return new PagedResultDto<ClubMemberDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
+    }
 }

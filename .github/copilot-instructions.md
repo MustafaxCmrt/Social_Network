@@ -146,6 +146,116 @@ dotnet test  # If tests exist
    }
    ```
 
+## GitHub Copilot IDE Comparison for .NET Development
+
+### GitHub Copilot in VS Code vs JetBrains Rider
+
+Both IDEs offer excellent GitHub Copilot integration for .NET development, but they have different strengths:
+
+#### **Visual Studio Code + GitHub Copilot**
+
+**Strengths:**
+- **Faster startup and lighter resource usage** - ideal for quick edits and smaller projects
+- **More frequent Copilot updates** - Microsoft's tight integration means latest features arrive first
+- **Better inline suggestions** - smoother, more responsive code completions
+- **Copilot Chat integration** - native chat experience with context awareness
+- **Cross-platform consistency** - identical experience on Windows, macOS, and Linux
+- **Extensive extension ecosystem** - complementary tools for .NET development
+
+**Best for:**
+- Rapid prototyping and quick iterations
+- Projects where Copilot suggestions are primary workflow
+- Teams using mixed tech stacks beyond .NET
+- Developers who prefer lightweight, customizable environments
+- Working with multiple programming languages
+
+**Recommended Extensions for .NET:**
+```
+- C# Dev Kit
+- GitHub Copilot
+- GitHub Copilot Chat
+- .NET Install Tool
+```
+
+#### **JetBrains Rider + GitHub Copilot**
+
+**Strengths:**
+- **Superior .NET-specific refactoring** - best-in-class code analysis and transformations
+- **Better code navigation** - find usages, type hierarchy, call chains more efficiently
+- **Integrated debugging experience** - advanced debugging features for complex scenarios
+- **Built-in database tools** - MySQL/SQL Server integration without extra extensions
+- **Better for large solutions** - handles multi-project .NET solutions more efficiently
+- **ReSharper integration** - combines Copilot with ReSharper's powerful inspections
+
+**Best for:**
+- Large, complex .NET solutions with multiple projects
+- Enterprise applications requiring advanced debugging
+- Developers who rely heavily on refactoring tools
+- Teams already using JetBrains tools
+- Projects with heavy database interaction
+
+**Configuration Tips:**
+- Enable "GitHub Copilot" plugin from JetBrains Marketplace
+- Configure Copilot to work with ReSharper's code style
+- Use Copilot for boilerplate, ReSharper for refactoring
+
+### **Recommendation for This Project**
+
+For the **Social Network API** project, both IDEs work excellently. Choose based on your workflow:
+
+**Choose VS Code if:**
+- You want faster, more responsive Copilot suggestions
+- You prefer lightweight development environment
+- You frequently use Copilot Chat for architectural questions
+- You're working on smaller feature additions
+
+**Choose Rider if:**
+- You're working with complex multi-layer refactoring
+- You need advanced debugging for EF Core queries
+- You prefer integrated database management tools
+- You're navigating large codebases frequently
+
+### **Best Practices for GitHub Copilot with .NET**
+
+Regardless of IDE choice:
+
+1. **Use descriptive comments** before code blocks to guide Copilot
+   ```csharp
+   // Create a service method to get user profile with posts and followers count
+   public async Task<UserProfileDto> GetUserProfileAsync(int userId)
+   ```
+
+2. **Leverage XML documentation** - Copilot uses these for context
+   ```csharp
+   /// <summary>
+   /// Retrieves user profile with aggregated social metrics
+   /// </summary>
+   /// <param name="userId">The unique identifier of the user</param>
+   /// <returns>Complete user profile with posts and follower statistics</returns>
+   ```
+
+3. **Follow project patterns** - Copilot learns from your codebase structure
+   - Maintain consistent DTO naming (`*RequestDto`, `*ResponseDto`)
+   - Follow service/repository patterns already established
+   - Use FluentValidation patterns consistently
+
+4. **Context is key** - Keep related files open to improve suggestions
+   - Open interface and implementation side-by-side
+   - Have DTOs visible when working on controllers
+   - Keep entity classes open when writing EF configurations
+
+5. **Verify Copilot suggestions** against project standards:
+   - Check that soft delete patterns are followed
+   - Ensure UnitOfWork is used, not DbContext directly
+   - Validate that proper error handling is included
+   - Confirm authentication/authorization is applied
+
+### **Performance Tips**
+
+- **VS Code**: Disable unused extensions to keep Copilot responsive
+- **Rider**: Allocate sufficient heap memory (Settings → Memory Settings)
+- **Both**: Exclude `bin/`, `obj/`, `node_modules/` from indexing for better performance
+
 ## Questions to Address
 
 - Are there specific performance optimizations applied (e.g., caching, query optimization strategies)?
